@@ -1,0 +1,6 @@
+{
+  "name": "AI Personalized Quiz & Learning Platform",
+  "description": "AI-powered intelligent assessment, question generation, proctoring, and personalized learning platform for educators and students.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

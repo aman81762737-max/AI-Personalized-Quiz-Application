@@ -1,0 +1,163 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email == 'admin@evalplatform.edu') ||
+        (request.auth.token.email == 'aman81762737@gmail.com')
+      );
+    }
+
+    // Admins collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Accredited Institutions Catalog
+    match /institutions/{institutionId} {
+      allow get, list: if true;
+      allow write: if isAdmin();
+    }
+
+    // Users
+    match /users/{userId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Student Profiles
+    match /studentProfiles/{studentId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Role-Partitioned Students Collection
+    match /students/{studentId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Teacher Profiles
+    match /teacherProfiles/{teacherId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Role-Partitioned Teachers Collection
+    match /teachers/{teacherId} {
+      allow get, list: if true;
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Materials (Teacher and Student study files)
+    match /materials/{materialId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Question Bank
+    match /questions/{questionId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Assessments
+    match /assessments/{assessmentId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Assessment Attempts (Canonical collection)
+    match /assessmentAttempts/{attemptId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // In-progress Exam recovery & autosave
+    match /inProgressExams/{attemptId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Proctoring Events
+    match /proctoringEvents/{eventId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Learning Plans
+    match /learningPlans/{planId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Timetables
+    match /timetables/{timetableId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Custom Detailed Roadmaps
+    match /customRoadmaps/{roadmapId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Roadmap Progress (completedNodeIds per user)
+    match /roadmapProgress/{userId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // AI Chat Sessions
+    match /aiChatSessions/{sessionId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Quick Notes
+    match /quickNotes/{noteId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // Study Plan Milestones
+    match /planMilestones/{userId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+
+    // AI Workflow Studio State
+    match /workflowStudio/{userId} {
+      allow get, list: if true;
+      allow create, update, delete: if true;
+    }
+  }
+}
