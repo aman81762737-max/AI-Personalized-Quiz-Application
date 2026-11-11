@@ -36,6 +36,19 @@ const CACHE_KEY_QUESTIONS = 'academic_cloud_cache_questions';
 const CACHE_KEY_ASSESSMENTS = 'academic_cloud_cache_assessments';
 const CACHE_KEY_ATTEMPTS = 'academic_cloud_cache_attempts';
 
+// In-memory cache to preserve binary fileData and full extractedText across Firestore snapshots
+const inMemoryMaterialMap = new Map<string, Partial<Material>>();
+
+function stripLegacyPlaceholderMetadata(text?: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\[Attached Multimodal File:.*?\]\n?/gi, '')
+    .replace(/File format:\s*\S+\n?/gi, '')
+    .replace(/Size:\s*[\d.]+\s*MB\n?/gi, '')
+    .replace(/Processing Pipeline:.*?\n?/gi, '')
+    .trim();
+}
+
 /**
  * ---------------------------------------------------------------------
  * 1. TEACHER AND STUDENT MATERIALS (P0)
@@ -45,12 +58,19 @@ export const subscribeMaterials = (
   onUpdate: (materials: Material[]) => void,
   onError?: (err: any) => void
 ): Unsubscribe => {
-  // Emit local cache immediately
+  // Emit local cache immediately (filtering out any broken legacy placeholder-only drafts)
   try {
     const cached = safeGetItem(CACHE_KEY_MATERIALS, '[]');
     const parsed = JSON.parse(cached);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      onUpdate(parsed);
+      const cleaned = parsed
+        .map((m: Material) => ({
+          ...m,
+          extractedText: stripLegacyPlaceholderMetadata(m.extractedText),
+          fileData: m.fileData || inMemoryMaterialMap.get(m.materialId)?.fileData,
+        }))
+        .filter((m: Material) => !(m.processingStatus === 'processing' && !m.extractedText && (!m.structuredConcepts || m.structuredConcepts.length === 0)));
+      onUpdate(cleaned);
     }
   } catch {}
 
@@ -61,9 +81,24 @@ export const subscribeMaterials = (
       const items: Material[] = [];
       snapshot.forEach((d) => {
         const data = d.data() as Material;
+        const mem = inMemoryMaterialMap.get(d.id);
+        const cleanedText = stripLegacyPlaceholderMetadata(mem?.extractedText || data.extractedText);
+        let status = data.processingStatus;
+        // Auto-heal: If document already has synthesized concepts or a non-placeholder summary, resolve status to 'processed'
+        if (
+          status === 'processing' &&
+          ((data.structuredConcepts && data.structuredConcepts.length > 0) ||
+            (data.summary && !data.summary.includes('AI is synthesizing')))
+        ) {
+          status = 'processed';
+        }
+
         items.push({
           ...data,
           materialId: d.id,
+          processingStatus: status,
+          extractedText: cleanedText,
+          fileData: data.fileData || mem?.fileData,
         });
       });
 
@@ -72,7 +107,7 @@ export const subscribeMaterials = (
           new Date(b.uploadDate || 0).getTime() - new Date(a.uploadDate || 0).getTime()
       );
 
-      safeSetItem(CACHE_KEY_MATERIALS, JSON.stringify(items));
+      safeSetItem(CACHE_KEY_MATERIALS, JSON.stringify(items.map(({ fileData: _fd, ...rest }) => rest)));
       onUpdate(items);
     },
     (err) => {
@@ -86,32 +121,67 @@ export const subscribeMaterials = (
   );
 };
 
-export const saveMaterialToCloud = async (material: Material): Promise<void> => {
-  const clean: any = {};
-  for (const [k, v] of Object.entries(material)) {
-    if (v !== undefined && k !== 'fileData') {
-      clean[k] = v;
+/**
+ * Deeply sanitizes an object for Firestore by recursively converting any undefined
+ * properties into null or omitting them, preventing Function setDoc() rejection.
+ */
+export function deepSanitizeForFirestore(val: any): any {
+  if (val === undefined) {
+    return null;
+  }
+  if (val === null || typeof val !== 'object') {
+    return val;
+  }
+  if (val instanceof Date) {
+    return val.toISOString();
+  }
+  if (Array.isArray(val)) {
+    return val
+      .filter((item) => item !== undefined)
+      .map((item) => deepSanitizeForFirestore(item));
+  }
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(val)) {
+    if (v !== undefined) {
+      result[k] = deepSanitizeForFirestore(v);
     }
   }
+  return result;
+}
+
+export const saveMaterialToCloud = async (material: Material): Promise<void> => {
+  // Preserve fileData and full extractedText in memory across snapshots
+  inMemoryMaterialMap.set(material.materialId, {
+    fileData: material.fileData || inMemoryMaterialMap.get(material.materialId)?.fileData,
+    extractedText: stripLegacyPlaceholderMetadata(material.extractedText),
+  });
+
+  // Always update local cache immediately so client stays resilient across tabs
+  try {
+    const raw = safeGetItem(CACHE_KEY_MATERIALS, '[]');
+    const list = JSON.parse(raw);
+    const filtered = Array.isArray(list) ? list.filter((m: Material) => m.materialId !== material.materialId) : [];
+    const cacheItem = { ...material };
+    delete cacheItem.fileData;
+    safeSetItem(CACHE_KEY_MATERIALS, JSON.stringify([cacheItem, ...filtered]));
+  } catch {}
+
+  const clean: any = deepSanitizeForFirestore(material);
+  delete clean.fileData;
+
   if (clean.extractedText && typeof clean.extractedText === 'string') {
-    clean.extractedText = clean.extractedText.slice(0, 15000);
+    clean.extractedText = stripLegacyPlaceholderMetadata(clean.extractedText).slice(0, 150000);
   }
 
   try {
     await setDoc(doc(db, 'materials', material.materialId), clean, { merge: true });
-    // Update local cache
-    try {
-      const raw = safeGetItem(CACHE_KEY_MATERIALS, '[]');
-      const list = JSON.parse(raw);
-      const filtered = Array.isArray(list) ? list.filter((m: Material) => m.materialId !== material.materialId) : [];
-      safeSetItem(CACHE_KEY_MATERIALS, JSON.stringify([clean, ...filtered]));
-    } catch {}
   } catch (err) {
     console.warn('Notice writing material to Firestore:', err);
   }
 };
 
 export const deleteMaterialFromCloud = async (materialId: string): Promise<void> => {
+  inMemoryMaterialMap.delete(materialId);
   try {
     await deleteDoc(doc(db, 'materials', materialId));
     try {

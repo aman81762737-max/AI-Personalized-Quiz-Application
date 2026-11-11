@@ -15,6 +15,7 @@ import { AtomAICoachDock } from './components/common/AtomAICoachDock';
 import { RemedialDrillModal } from './components/common/RemedialDrillModal';
 import { QuickNotesModal } from './components/common/QuickNotesModal';
 import { aiService } from './services/aiService';
+import { synthesisManager } from './services/documentSynthesisManager';
 import { safeSetItem } from './utils/safeStorage';
 import {
   getSynchronizedAssessments,
@@ -182,6 +183,9 @@ function MainApp() {
     const unsubMats = subscribeMaterials((mats) => {
       setMaterials(mats);
     });
+    const unsubSynthesis = synthesisManager.subscribe((mats) => {
+      setMaterials(mats);
+    });
     const unsubQuestions = subscribeQuestions((ques) => {
       setQuestions(ques);
     });
@@ -200,6 +204,7 @@ function MainApp() {
 
     return () => {
       unsubMats();
+      unsubSynthesis();
       unsubQuestions();
       unsubAssessments();
       unsubAttempts();

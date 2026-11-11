@@ -233,7 +233,7 @@ export const TeacherAssessmentsView: React.FC<TeacherAssessmentsViewProps> = ({
             <div className="space-y-4">
               {attempt.reviewItems.map((item, qIdx) => (
                 <div
-                  key={item.questionId || qIdx}
+                  key={`${item.questionId || 'item'}-${qIdx}`}
                   className={`p-5 rounded-2xl border transition-all ${
                     item.isCorrect
                       ? 'bg-emerald-950/15 border-[#10B981]/30 hover:border-[#10B981]/50'

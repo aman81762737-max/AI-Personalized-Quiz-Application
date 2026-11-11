@@ -876,7 +876,7 @@ export const CreateAssessmentView: React.FC<CreateAssessmentViewProps> = ({
               <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
                 {draftPool.map((draft, dIdx) => (
                   <div
-                    key={draft.questionId || `draft-${dIdx}`}
+                    key={`draft-${draft.questionId || 'd'}-${dIdx}`}
                     className="p-3 rounded-lg bg-black/40 border border-amber-500/20 text-xs flex items-start justify-between gap-3"
                   >
                     <div className="space-y-1 flex-1">

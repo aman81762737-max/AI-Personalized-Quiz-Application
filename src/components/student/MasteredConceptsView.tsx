@@ -50,7 +50,8 @@ export const MasteredConceptsView: React.FC<MasteredConceptsViewProps> = ({
   const attemptBasedStrengths: ConceptDetail[] = React.useMemo(() => {
     if (!attempts || attempts.length === 0) {
       if (studentProfile?.strengths && studentProfile.strengths.length > 0) {
-        return studentProfile.strengths.map((str) => ({
+        const uniqueStrengths = Array.from(new Set(studentProfile.strengths.filter(Boolean)));
+        return uniqueStrengths.map((str) => ({
           name: str,
           accuracy: 90,
           questionsAttempted: 12,
@@ -171,11 +172,11 @@ export const MasteredConceptsView: React.FC<MasteredConceptsViewProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {attemptBasedStrengths.map((c) => {
+              {attemptBasedStrengths.map((c, cIdx) => {
                 const isSelected = selectedConcept?.name === c.name;
                 return (
                   <button
-                    key={c.name}
+                    key={`${c.name || 'concept'}-${cIdx}`}
                     type="button"
                     onClick={() => setSelectedConcept(c)}
                     className={`w-full text-left p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-4 ${

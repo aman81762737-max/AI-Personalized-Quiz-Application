@@ -864,7 +864,7 @@ ${questionsContent}
 
                         return (
                           <div
-                            key={q.id || qIdx}
+                            key={`${q.id || 'q'}-${qIdx}`}
                             className={`p-5 rounded-xl border transition-all ${
                               selected
                                 ? isCorrect

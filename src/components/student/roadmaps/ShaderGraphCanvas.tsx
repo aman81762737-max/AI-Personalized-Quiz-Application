@@ -287,7 +287,7 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
   };
 
   // Render an individual Topic Card with hover Action Pill (matching Image 2)
-  const renderTopicCard = (item: RoadmapShTopicItem) => {
+  const renderTopicCard = (item: RoadmapShTopicItem, fallbackKey?: string | number) => {
     const status = topicStatuses[item.id] || 'not_started';
     const isHovered = hoveredTopicId === item.id;
     const isMatched = isTopicMatch(item.title, item.description);
@@ -310,9 +310,11 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
         : 'bg-[#FEEA9A] hover:bg-[#FDE047] border-2 border-slate-900 text-slate-950 font-medium';
     }
 
+    const itemKey = fallbackKey !== undefined ? `${item.id || 'topic'}-${fallbackKey}` : (item.id || 'topic');
+
     return (
       <div
-        key={item.id}
+        key={itemKey}
         className={`relative ${item.colSpan === 2 ? 'col-span-2' : 'col-span-1'} group`}
         onMouseEnter={() => setHoveredTopicId(item.id)}
         onMouseLeave={() => setHoveredTopicId(null)}
@@ -409,7 +411,7 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
 
         {/* 2-column Grid of Topic Cards */}
         <div className="grid grid-cols-2 gap-2">
-          {container.topics.map((t) => renderTopicCard(t))}
+          {container.topics.map((t, tIdx) => renderTopicCard(t, `c-${tIdx}`))}
         </div>
 
         {/* Optional Subgroups inside container (e.g. Prompting Techniques, Model Interaction) */}
@@ -427,7 +429,7 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
                   </h5>
                 )}
                 <div className="grid grid-cols-2 gap-2">
-                  {sg.topics.map((t) => renderTopicCard(t))}
+                  {sg.topics.map((t, tIdx) => renderTopicCard(t, `sg-${sgIdx}-${tIdx}`))}
                 </div>
               </div>
             ))}
@@ -618,11 +620,11 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
             </h4>
 
             <div className="space-y-2">
-              {shData.relatedRoadmaps.map((rel) => {
+              {shData.relatedRoadmaps.map((rel, rIdx) => {
                 const targetMatch = TOP_TRACKS.find((t) => t.id === rel.id || t.title.toLowerCase().includes(rel.title.toLowerCase()));
                 return (
                   <button
-                    key={rel.id}
+                    key={`${rel.id || 'rel'}-${rIdx}`}
                     type="button"
                     onClick={() => {
                       if (targetMatch && onSelectRoadmapId) {
@@ -672,7 +674,7 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
             <div className="space-y-1.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
               {shData.milestones.map((m, idx) => (
                 <button
-                  key={m.id}
+                  key={`${m.id || 'm'}-${idx}`}
                   type="button"
                   onClick={() => scrollToMilestone(m.id)}
                   className={`w-full text-left px-2 py-1.5 rounded text-[11px] font-sans truncate transition-colors cursor-pointer flex items-center gap-2 ${
@@ -724,7 +726,7 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
               {shData.milestones.map((milestone, mIdx) => {
                 return (
                   <div
-                    key={milestone.id}
+                    key={`${milestone.id || 'ms'}-${mIdx}`}
                     id={milestone.id}
                     className="relative w-full flex flex-col items-center"
                   >
@@ -864,7 +866,7 @@ export const ShaderGraphCanvas: React.FC<ShaderGraphCanvasProps> = ({
 
                           {/* Stacked Fan-Out Topic Cards */}
                           <div className="flex flex-col space-y-2.5 w-52 sm:w-64 pl-2">
-                            {milestone.fanOutRight.map((item) => renderTopicCard(item))}
+                            {milestone.fanOutRight.map((item, fIdx) => renderTopicCard(item, `fan-${mIdx}-${fIdx}`))}
                           </div>
                         </div>
                       )}

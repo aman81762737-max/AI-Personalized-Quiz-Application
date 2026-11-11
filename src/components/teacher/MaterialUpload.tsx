@@ -4,7 +4,8 @@ import { Material } from '../../types';
 import { FileDataPayload } from '../../services/aiService';
 import { useToast } from '../common/Toast';
 import { synthesisManager } from '../../services/documentSynthesisManager';
-import { deleteMaterialFromCloud } from '../../services/cloudSyncService';
+import { deleteMaterialFromCloud, saveMaterialToCloud } from '../../services/cloudSyncService';
+import { extractDocumentTextInBrowser, isCleanHumanText } from '../../utils/clientDocumentExtractor';
 import { ViewAllMaterialsModal } from './ViewAllMaterialsModal';
 import {
   AIThinkingAnimation,
@@ -65,10 +66,38 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
 
   const [isViewAllOpen, setIsViewAllOpen] = useState(false);
 
+  const [, setJobVersion] = useState(0);
+
+  useEffect(() => {
+    return synthesisManager.subscribeJobs(() => {
+      setJobVersion((v) => v + 1);
+    });
+  }, []);
+
   // Sync synthesisManager with current materials
   useEffect(() => {
     synthesisManager.updateMaterials(materials);
   }, [materials]);
+
+  // Auto-heal any stale material that has 'processing' status when no synthesis job is active
+  useEffect(() => {
+    let healed = false;
+    materials.forEach((m) => {
+      if (m.processingStatus === 'processing' && !synthesisManager.isJobActive(m.materialId)) {
+        m.processingStatus = 'processed';
+        saveMaterialToCloud(m).catch(() => {});
+        healed = true;
+      }
+    });
+    if (
+      healed &&
+      selectedMaterial &&
+      selectedMaterial.processingStatus === 'processing' &&
+      !synthesisManager.isJobActive(selectedMaterial.materialId)
+    ) {
+      setSelectedMaterial({ ...selectedMaterial, processingStatus: 'processed' });
+    }
+  }, [materials, selectedMaterial]);
 
   // Keep selected material updated if current changes
   useEffect(() => {
@@ -86,20 +115,97 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
     }
   }, [materials]);
 
-  const processSelectedFile = (file: File) => {
+  const handleSynthesizeExistingMaterial = async (m: Material) => {
+    try {
+      showToast(`Starting AI synthesis for "${m.fileName}"...`, 'info');
+      await synthesisManager.startSynthesis({
+        fileName: m.fileName,
+        fileExtension: m.fileType || 'txt',
+        subject: m.subject,
+        topic: m.topic,
+        extractedText: m.extractedText || '',
+        uploadedFile: m.fileData || null,
+        rawFile: null,
+        userId: userProfile?.userId || 'faculty-01',
+        onSuccess: (completedMat) => {
+          showToast(`"${completedMat.fileName}" synthesized and ready!`, 'success');
+          setSelectedMaterial(completedMat);
+          if (onUpdateMaterial) onUpdateMaterial(completedMat);
+        },
+        onError: () => {
+          showToast(`Synthesis failed for "${m.fileName}".`, 'error');
+        },
+      });
+    } catch {
+      showToast('Could not start synthesis process.', 'error');
+    }
+  };
+
+  const processSelectedFile = async (file: File) => {
     setFileName(file.name);
     setRawFile(file);
 
-    // Auto-infer topic & format from filename
+    // Auto-infer clean topic & format from filename (strip extensions, dates, 'merged', 'final')
     const ext = file.name.split('.').pop()?.toLowerCase() || 'txt';
     setFileExtension(ext);
-    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').replace(/[_\\-]/g, ' ');
+    const nameWithoutExt = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_\\-]/g, ' ')
+      .replace(/\b(final|merged|draft|copy|v\d+|\d{1,2}[a-z]{3}\d{2,4})\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Curriculum Material';
+
     if (topic === 'Data Structures' || !topic.trim()) {
       setTopic(nameWithoutExt);
     }
 
     if (file.size > 50 * 1024 * 1024) {
       showToast('File exceeds 50MB limit. Please upload a smaller file.', 'error');
+      return;
+    }
+
+    // 1. Immediately extract real text from PPTX, DOCX, PDF, or text files locally in the browser
+    let browserExtracted = '';
+    try {
+      browserExtracted = await extractDocumentTextInBrowser(file);
+    } catch (err) {
+      console.warn('Browser text extraction warning:', err);
+    }
+
+    if (browserExtracted && browserExtracted.trim().length > 20) {
+      setExtractedText(browserExtracted);
+
+      // Try to refine topic from the first meaningful slide/section heading if current topic is generic like "Unit V"
+      const firstHeadingMatch = browserExtracted
+        .split(/\r?\n/)
+        .map((l) => l.replace(/^---+\s*Slide\s*\d+\s*---+$/i, '').trim())
+        .find((l) => l.length >= 5 && l.length <= 65 && /[a-zA-Z]{3,}/.test(l) && !/^(unit|chapter|module|lecture|slide)\s*[0-9ivx]+$/i.test(l));
+
+      if (firstHeadingMatch && /^unit\s+[0-9ivx]+$/i.test(nameWithoutExt)) {
+        setTopic(`${nameWithoutExt}: ${firstHeadingMatch}`);
+      }
+    }
+
+    // 2. If browser already extracted rich text AND the raw file is large (>1.5MB, e.g. PPTX with heavy media),
+    // encode the extracted text into base64 so API requests are <50KB and instantaneous instead of uploading 12MB+ media binaries
+    if (browserExtracted && browserExtracted.trim().length > 40 && file.size > 1.5 * 1024 * 1024) {
+      try {
+        const textBase64 = btoa(unescape(encodeURIComponent(browserExtracted)));
+        setUploadedFile({
+          mimeType: 'text/plain',
+          base64: textBase64,
+          fileName: file.name,
+          size: file.size,
+        });
+      } catch {
+        setUploadedFile({
+          mimeType: 'text/plain',
+          base64: '',
+          fileName: file.name,
+          size: file.size,
+        });
+      }
+      showToast(`Extracted ${(browserExtracted.length / 1024).toFixed(1)} KB of curriculum content from ${file.name}`, 'success');
       return;
     }
 
@@ -112,7 +218,7 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
     if (isTextFile) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        const content = (event.target?.result as string) || '';
+        const content = (event.target?.result as string) || browserExtracted || '';
         setExtractedText(content);
         try {
           const base64 = btoa(unescape(encodeURIComponent(content)));
@@ -132,7 +238,7 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
       };
       reader.readAsText(file);
     } else {
-      // Multimodal files: PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS, PNG, JPG, JPEG, WEBP, etc.
+      // Multimodal files <= 1.5MB: PDF, DOCX, PPTX, etc.
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = (event.target?.result as string) || '';
@@ -146,13 +252,11 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
         };
         setUploadedFile(payload);
 
-        // Preview snippet
-        setExtractedText(
-          `[Attached Multimodal File: ${file.name}]\n` +
-          `File format: ${ext.toUpperCase()}\n` +
-          `Size: ${(file.size / (1024 * 1024)).toFixed(2)} MB\n` +
-          `Processing Pipeline: Gemini 3.8 Flash Document Vision`
-        );
+        if (browserExtracted && browserExtracted.trim().length > 20) {
+          setExtractedText(browserExtracted);
+        } else {
+          setExtractedText('');
+        }
         showToast(`Loaded ${file.name} for AI analysis`, 'success');
       };
       reader.onerror = () => {
@@ -471,7 +575,7 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
           {/* Material Selector Bar with Hover 'X' and Vertical Padding to Prevent Cutoffs */}
           <div className="flex items-center gap-2 overflow-x-auto py-2.5 px-1 font-mono">
             {materials.map((m, mIdx) => {
-              const isProcessingItem = m.processingStatus === 'processing';
+              const isProcessingItem = Boolean(synthesisManager.isJobActive(m.materialId));
               const isSelected = selectedMaterial?.materialId === m.materialId;
 
               return (
@@ -498,7 +602,7 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
 
                   <span className="truncate max-w-[120px]">{m.fileName}</span>
 
-                  {/* High-Tech Futuristic Cybernetic Processing Badge */}
+                  {/* Active background job badge */}
                   {isProcessingItem && (
                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold text-[#00F0FF] bg-[#00F0FF]/15 border border-[#00F0FF]/40 shadow-[0_0_10px_rgba(0,240,255,0.4)]">
                       <span className="relative flex h-2 w-2 shrink-0">
@@ -523,59 +627,63 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
             })}
           </div>
 
-          {selectedMaterial ? (
-            <div className="bg-[#0A0D14]/85 p-6 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-white/10">
-                <div>
-                  <div className="flex items-center gap-2 font-mono flex-wrap">
-                    <span
-                      className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-white/5 text-[#00F0FF] border border-[#00F0FF]/30"
-                    >
-                      {selectedMaterial.fileType || 'FILE'}
-                    </span>
-                    <span className="text-[11px] font-semibold text-[#10B981] uppercase tracking-wider">
-                      {selectedMaterial.subject} · {selectedMaterial.topic}
-                    </span>
-                    {selectedMaterial.processingStatus === 'processing' && (
-                      <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold text-[#00F0FF] bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-[#00F0FF]/40 shadow-[0_0_12px_rgba(0,240,255,0.3)]">
-                        <span className="relative flex h-2 w-2 shrink-0">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00F0FF] opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00F0FF]"></span>
-                        </span>
-                        <span>DECOMPOSING INGESTION STREAM...</span>
+          {selectedMaterial ? (() => {
+            const isCurrentlySynthesizing = Boolean(
+              synthesisManager.isJobActive(selectedMaterial.materialId)
+            );
+            return (
+              <div className="bg-[#0A0D14]/85 p-6 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-white/10">
+                  <div>
+                    <div className="flex items-center gap-2 font-mono flex-wrap">
+                      <span
+                        className="text-[10px] font-bold px-2 py-0.5 rounded uppercase bg-white/5 text-[#00F0FF] border border-[#00F0FF]/30"
+                      >
+                        {selectedMaterial.fileType || 'FILE'}
                       </span>
-                    )}
+                      <span className="text-[11px] font-semibold text-[#10B981] uppercase tracking-wider">
+                        {selectedMaterial.subject} · {selectedMaterial.topic}
+                      </span>
+                      {isCurrentlySynthesizing && (
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold text-[#00F0FF] bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-[#00F0FF]/40 shadow-[0_0_12px_rgba(0,240,255,0.3)]">
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00F0FF] opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00F0FF]"></span>
+                          </span>
+                          <span>DECOMPOSING INGESTION STREAM...</span>
+                        </span>
+                      )}
+                    </div>
+                    <h2 className="text-lg font-bold text-white mt-1">
+                      {selectedMaterial.fileName}
+                    </h2>
                   </div>
-                  <h2 className="text-lg font-bold text-white mt-1">
-                    {selectedMaterial.fileName}
-                  </h2>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {selectedMaterial.processingStatus !== 'processing' && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!isCurrentlySynthesizing && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectForQuestions(selectedMaterial)}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold text-black bg-[#00F0FF] hover:bg-[#38bdf8] rounded-xl transition-all shadow-[0_0_15px_rgba(0,240,255,0.25)] shrink-0 cursor-pointer active:scale-95"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>Generate Assignment for Students</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={() => onSelectForQuestions(selectedMaterial)}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold text-black bg-[#00F0FF] hover:bg-[#38bdf8] rounded-xl transition-all shadow-[0_0_15px_rgba(0,240,255,0.25)] shrink-0 cursor-pointer active:scale-95"
+                      onClick={() => handleDeleteItem(selectedMaterial.materialId)}
+                      title="Delete this synthesized document"
+                      className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
                     >
-                      <Sparkles className="w-4 h-4" />
-                      <span>Generate Assignment for Students</span>
+                      <Trash2 className="w-4 h-4" />
                     </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteItem(selectedMaterial.materialId)}
-                    title="Delete this synthesized document"
-                    className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  </div>
                 </div>
-              </div>
 
-              {/* Advanced Futuristic Ingestion Progress Radar when Processing */}
-              {selectedMaterial.processingStatus === 'processing' ? (
+                {/* Advanced Futuristic Ingestion Progress Radar ONLY when ACTUALLY Synthesizing in Background */}
+                {isCurrentlySynthesizing ? (
                 <div className="p-6 rounded-2xl bg-[#07090E] border border-[#00F0FF]/30 space-y-6 relative overflow-hidden font-mono shadow-[0_0_30px_rgba(0,240,255,0.15)]">
                   {/* Holographic scanning background glow */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#00F0FF]/5 to-transparent animate-pulse pointer-events-none" />
@@ -694,8 +802,18 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
                           </div>
                         ))
                       ) : (
-                        <div className="p-6 text-center text-xs font-mono text-slate-400">
-                          No decomposed concepts stored yet. Click "Process with AI" to generate structured knowledge tree.
+                        <div className="p-6 text-center text-xs font-mono text-slate-400 space-y-3 bg-black/30 rounded-xl border border-white/5">
+                          <p className="text-slate-300">
+                            Curriculum material is loaded and ready for AI pedagogical decomposition.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleSynthesizeExistingMaterial(selectedMaterial)}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono font-bold text-black bg-[#10B981] hover:bg-emerald-400 rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] cursor-pointer active:scale-95"
+                          >
+                            <Sparkles className="w-4 h-4" />
+                            <span>Synthesize Concepts with AI</span>
+                          </button>
                         </div>
                       )}
                     </div>
@@ -703,7 +821,8 @@ export const MaterialUpload: React.FC<MaterialUploadProps> = ({
                 </>
               )}
             </div>
-          ) : (
+            );
+          })() : (
             <div className="bg-[#0A0D14]/85 p-12 rounded-2xl border border-white/10 text-center text-xs font-mono text-slate-400">
               No learning material selected. Select an existing material or upload one.
             </div>

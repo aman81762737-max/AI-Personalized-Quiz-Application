@@ -61,18 +61,25 @@ export class AIService {
     subjectHint?: string,
     fileData?: FileDataPayload
   ): Promise<MaterialAnalysisResult> {
-    const res = await fetch('/api/ai/analyze-material', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, text, subjectHint, fileData }),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
+    try {
+      const res = await fetch('/api/ai/analyze-material', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, text, subjectHint, fileData }),
+        signal: controller.signal,
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to analyze material');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to analyze material');
+      }
+
+      return await res.json();
+    } finally {
+      clearTimeout(timer);
     }
-
-    return res.json();
   }
 
   public async generateQuestions(params: {
@@ -87,19 +94,40 @@ export class AIService {
     documentTitle?: string;
     drillBrief?: string;
   }): Promise<Question[]> {
-    const res = await fetch('/api/ai/generate-questions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 45000);
+    try {
+      const res = await fetch('/api/ai/generate-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params),
+        signal: controller.signal,
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Question generation could not be completed. Please try again.');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Question generation could not be completed. Please try again.');
+      }
+
+      const data = await res.json();
+      return data.questions || [];
+    } catch (err: any) {
+      // If request aborted due to network/proxy timeout, retry once without large base64 fileData payload
+      if (params.fileData) {
+        const retryRes = await fetch('/api/ai/generate-questions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...params, fileData: undefined }),
+        });
+        if (retryRes.ok) {
+          const retryData = await retryRes.json();
+          return retryData.questions || [];
+        }
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-
-    const data = await res.json();
-    return data.questions || [];
   }
 
   public async formulateDrillBrief(params: {

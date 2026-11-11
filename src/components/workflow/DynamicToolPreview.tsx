@@ -1690,11 +1690,11 @@ export const DynamicToolPreview: React.FC<DynamicToolPreviewProps> = ({
 
           {/* Criteria Sliders */}
           <div className="space-y-3">
-            {initialCriteria.map((c: any) => {
+            {initialCriteria.map((c: any, cIdx: number) => {
               const currentScore = criteriaScores[c.id || c.name] ?? Math.round(c.max * 0.8);
               return (
                 <div
-                  key={c.id || c.name}
+                  key={`${c.id || c.name || 'crit'}-${cIdx}`}
                   className={`p-4 rounded-2xl border ${
                     isDark ? 'bg-[#0B0F19] border-white/10' : 'bg-white border-slate-200'
                   } space-y-2`}

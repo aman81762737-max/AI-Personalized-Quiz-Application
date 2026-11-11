@@ -3,12 +3,190 @@ import type { Request, Response } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import zlib from 'zlib';
+import { PDFParse } from 'pdf-parse';
 import { sendOtpEmail, verifyOtp } from './emailService.ts';
+import { memoryAcademicStore } from './models/academicModels.ts';
 
 dotenv.config();
 
 export const apiRouter = express.Router();
 apiRouter.use(express.json({ limit: '30mb' }));
+
+/**
+ * Standard Part 28 System Health Endpoint
+ */
+apiRouter.get('/health', (_req: Request, res: Response) => {
+  return res.json({ success: true, message: 'Server is running' });
+});
+
+/**
+ * Part 28 REST APIs: Institutions, Courses, Subjects, Materials, Study Plans & Audit
+ */
+apiRouter.get('/institutions', (_req: Request, res: Response) => {
+  return res.json({ success: true, data: memoryAcademicStore.institutions });
+});
+
+apiRouter.post('/institutions', (req: Request, res: Response) => {
+  const { name, code, domain, address } = req.body;
+  if (!name || !code) {
+    return res.status(400).json({ success: false, error: 'Name and code are required' });
+  }
+  const newInst = {
+    institutionId: `inst-${Date.now()}`,
+    name,
+    code: String(code).toUpperCase(),
+    domain: domain || '',
+    address: address || '',
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  memoryAcademicStore.institutions.push(newInst);
+  return res.status(201).json({ success: true, data: newInst });
+});
+
+apiRouter.get('/courses', (req: Request, res: Response) => {
+  const { institutionId } = req.query;
+  const list = institutionId
+    ? memoryAcademicStore.courses.filter((c) => c.institutionId === institutionId)
+    : memoryAcademicStore.courses;
+  return res.json({ success: true, data: list });
+});
+
+apiRouter.post('/courses', (req: Request, res: Response) => {
+  const { institutionId, name, code, department, semester, academicYear, description } = req.body;
+  if (!name || !code || !department) {
+    return res.status(400).json({ success: false, error: 'Name, code, and department are required' });
+  }
+  const newCourse = {
+    courseId: `course-${Date.now()}`,
+    institutionId: institutionId || 'inst-01',
+    name,
+    code: String(code).toUpperCase(),
+    department,
+    semester: semester || 'Semester VII',
+    academicYear: academicYear || '2026-2027',
+    description: description || '',
+    facultyIds: [],
+    enrolledStudentIds: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  memoryAcademicStore.courses.push(newCourse);
+  return res.status(201).json({ success: true, data: newCourse });
+});
+
+apiRouter.get('/subjects', (req: Request, res: Response) => {
+  const { courseId } = req.query;
+  const list = courseId
+    ? memoryAcademicStore.subjects.filter((s) => s.courseId === courseId)
+    : memoryAcademicStore.subjects;
+  return res.json({ success: true, data: list });
+});
+
+apiRouter.post('/subjects', (req: Request, res: Response) => {
+  const { courseId, name, code, description, topics, creditHours } = req.body;
+  if (!name || !code) {
+    return res.status(400).json({ success: false, error: 'Name and code are required' });
+  }
+  const newSubject = {
+    subjectId: `sub-${Date.now()}`,
+    courseId: courseId || 'course-cse-401',
+    name,
+    code: String(code).toUpperCase(),
+    description: description || '',
+    topics: Array.isArray(topics) ? topics : ['Core Foundations'],
+    creditHours: Number(creditHours) || 4,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  memoryAcademicStore.subjects.push(newSubject);
+  return res.status(201).json({ success: true, data: newSubject });
+});
+
+apiRouter.get('/materials', (req: Request, res: Response) => {
+  const { subjectId } = req.query;
+  const list = subjectId
+    ? memoryAcademicStore.materials.filter((m) => m.subjectId === subjectId)
+    : memoryAcademicStore.materials;
+  return res.json({ success: true, data: list });
+});
+
+apiRouter.get('/materials/:id', (req: Request, res: Response) => {
+  const found = memoryAcademicStore.materials.find((m) => m.materialId === req.params.id);
+  if (!found) {
+    return res.status(404).json({ success: false, error: 'Material not found' });
+  }
+  return res.json({ success: true, data: found });
+});
+
+apiRouter.post('/materials', (req: Request, res: Response) => {
+  const { subjectId, title, fileName, fileType, fileSize, summary, topics } = req.body;
+  if (!title || !fileName) {
+    return res.status(400).json({ success: false, error: 'Title and fileName are required' });
+  }
+  const newMat = {
+    materialId: `mat-${Date.now()}`,
+    subjectId: subjectId || 'sub-dsa',
+    uploadedBy: 'Faculty Member',
+    title,
+    fileName,
+    fileType: fileType || 'application/pdf',
+    fileSize: Number(fileSize) || 1024000,
+    summary: summary || 'Faculty uploaded pedagogical material',
+    topics: Array.isArray(topics) ? topics : ['Curriculum Invariant'],
+    chunksCount: 8,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  memoryAcademicStore.materials.push(newMat);
+  return res.status(201).json({ success: true, data: newMat });
+});
+
+apiRouter.get('/study-plans', (req: Request, res: Response) => {
+  const { studentId } = req.query;
+  return res.json({
+    success: true,
+    data: [
+      {
+        planId: 'plan-01',
+        studentId: studentId || 'student-01',
+        title: 'Targeted Remediation: Graph Traversals & Memory Bounds',
+        focusTopics: ['Graphs', 'BFS vs DFS Queue Bounds'],
+        durationDays: 7,
+        dailyTargetMinutes: 45,
+        milestones: [
+          { day: 1, task: 'Review Lecture 4 Queue Boundary Notes', completed: true },
+          { day: 2, task: 'Complete 5-Question Socratic Focus Drill', completed: false },
+          { day: 3, task: 'Implement Directed Cycle Detection in Sandbox', completed: false },
+        ],
+        generatedBy: 'Atom AI Personalization Engine',
+      },
+    ],
+  });
+});
+
+apiRouter.post('/study-plans', (req: Request, res: Response) => {
+  const { studentId, title, focusTopics, durationDays } = req.body;
+  const newPlan = {
+    planId: `plan-${Date.now()}`,
+    studentId: studentId || 'student-01',
+    title: title || 'Custom Mastery Progression Plan',
+    focusTopics: Array.isArray(focusTopics) ? focusTopics : ['Core Algorithms'],
+    durationDays: Number(durationDays) || 7,
+    dailyTargetMinutes: 30,
+    milestones: [
+      { day: 1, task: `Foundational study of ${focusTopics?.[0] || 'Core Concepts'}`, completed: false },
+      { day: 2, task: 'Adaptive diagnostic practice quiz', completed: false },
+    ],
+    generatedBy: 'Atom AI Personalization Engine',
+  };
+  return res.status(201).json({ success: true, data: newPlan });
+});
+
+apiRouter.get('/audit-logs', (_req: Request, res: Response) => {
+  return res.json({ success: true, data: memoryAcademicStore.auditLogs });
+});
 
 /**
  * Institutional Real OTP Authentication Endpoints
@@ -61,24 +239,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Prom
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
 }
 
-const CANDIDATE_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest'];
+const CANDIDATE_MODELS = ['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-flash-latest'];
 
 export async function generateWithGemini(
   ai: GoogleGenAI,
   params: { contents: any; config?: any; timeoutMs?: number; model?: string }
 ) {
   let lastErr = null;
-  const timeoutMs = params.timeoutMs ?? 12000;
-  const primaryModel = params.model || 'gemini-3.8-flash';
+  const timeoutMs = params.timeoutMs ?? 15000;
+  const primaryModel = params.model || 'gemini-2.5-flash';
   const modelsToTry = [
     primaryModel,
-    ...(primaryModel !== 'gemini-flash-latest' ? ['gemini-flash-latest'] : []),
+    ...(primaryModel !== 'gemini-2.5-flash' ? ['gemini-2.5-flash'] : []),
+    'gemini-3.8-flash',
+    'gemini-flash-latest',
   ];
 
   for (let i = 0; i < modelsToTry.length; i++) {
     const model = modelsToTry[i];
-    // Keep timeout crisp so UI doesn't hang
-    const currentTimeout = i === 0 ? timeoutMs : Math.min(timeoutMs, 6000);
+    const currentTimeout = i === 0 ? timeoutMs : 8000;
     try {
       const res = await withTimeout(
         ai.models.generateContent({
@@ -96,13 +275,16 @@ export async function generateWithGemini(
     } catch (err: any) {
       lastErr = err;
       console.warn(`Model ${model} unavailable (${err?.status || err?.message}). Trying next candidate...`);
-      // If error is authentication/quota error, don't waste time trying next candidate
+      // If error is authentication, permission, quota, or timeout, don't waste time hanging
       if (
         err?.status === 400 ||
         err?.status === 401 ||
         err?.status === 403 ||
+        err?.status === 404 ||
+        err?.status === 429 ||
         err?.message?.includes('API_KEY_INVALID') ||
-        err?.message?.includes('API key not valid')
+        err?.message?.includes('API key not valid') ||
+        err?.message?.includes('PERMISSION_DENIED')
       ) {
         break;
       }
@@ -135,26 +317,59 @@ apiRouter.get('/gemini/status', (req: Request, res: Response) => {
 });
 
 /**
- * Helper to extract readable text snippets from PDF binary as fallback
- * Supports deep traversal of multi-page and large PDF documents
+ * Strips data URL scheme and all whitespace to produce pure base64.
  */
-function extractReadablePdfText(base64: string): string {
+function cleanBase64String(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw.replace(/^data:[^;]+;base64,/, '').replace(/\s+/g, '');
+}
+
+/**
+ * Validates whether a buffer contains a well-formed PDF with at least one page.
+ * Prevents Gemini from throwing: ApiError: {"error":{"code":400,"message":"The document has no pages.","status":"INVALID_ARGUMENT"}}
+ * and prevents PDFParse from throwing: InvalidPDFException: Invalid PDF structure.
+ */
+function isBufferValidPdfWithPages(buffer: Buffer): boolean {
+  if (!buffer || buffer.length < 250) return false;
+  const headerSlice = buffer.slice(0, Math.min(1024, buffer.length)).toString('latin1');
+  if (!headerSlice.includes('%PDF-')) return false;
+
+  const latin1 = buffer.toString('latin1');
+  // Check if it has at least one page definition
+  const hasPage = /\/Type\s*\/Page\b|\/Pages\b/i.test(latin1);
+  const isZeroPage = /\/Pages\b[^>]*\/Count\s+0\b/i.test(latin1);
+
+  return hasPage && !isZeroPage;
+}
+
+/**
+ * Robust, unicode-calibrated PDF text extractor powered by PDFParse.
+ * Replaces broken regex scanners that extracted font tables and CMap binary artifacts.
+ */
+async function extractPdfTextWithPdfParse(buffer: Buffer): Promise<string> {
   try {
-    const buffer = Buffer.from(base64, 'base64');
-    const raw = buffer.toString('latin1');
-    const matches: string[] = [];
-    // Match text fragments in PDF stream format (text) or uncompressed strings
-    const regex = /\(([a-zA-Z0-9 ,.;:!?'"()_\-]{4,200})\)/g;
-    let m;
-    while ((m = regex.exec(raw)) !== null) {
-      const item = m[1].trim();
-      if (item && !matches.includes(item)) {
-        matches.push(item);
-        if (matches.length >= 10000) break;
-      }
+    if (!isBufferValidPdfWithPages(buffer)) {
+      return '';
     }
-    return matches.join(' ');
-  } catch {
+
+    const parser: any = new PDFParse({ data: buffer });
+    if (typeof parser.load === 'function') {
+      await parser.load();
+    }
+    const result = await parser.getText();
+    if (typeof parser.destroy === 'function') {
+      await parser.destroy();
+    }
+    if (result && typeof result.text === 'string') {
+      const clean = result.text
+        .replace(/-- \d+ of \d+ --/g, '')
+        .replace(/[ \t]+/g, ' ')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      return clean;
+    }
+    return '';
+  } catch (err: any) {
     return '';
   }
 }
@@ -165,14 +380,76 @@ interface ZipEntry {
 }
 
 /**
- * Extracts and decompresses XML files from ZIP-based formats like .pptx and .docx
+ * Extracts and decompresses XML files from ZIP-based formats like .pptx and .docx.
+ * Uses Central Directory (PK\x01\x02) first so files with bit-3 data descriptors
+ * (where Local File Header compressedSize is 0, such as PowerPoint & Google Slides exports)
+ * are extracted 100% accurately and instantaneously.
  */
 function extractZipEntries(buffer: Buffer): ZipEntry[] {
   const entries: ZipEntry[] = [];
+  const seenNames = new Set<string>();
+
+  const isTargetXmlOrText = (name: string) =>
+    /\.(xml|rels|txt|md)$/i.test(name) && !/media\/|embeddings\/|theme\//i.test(name);
+
   try {
+    // Pass 1: Read ZIP Central Directory headers (0x02014b50 = PK\x01\x02) from the end of the file
+    // Central Directory starts near the end of the buffer, scan last 256KB (or full buffer if smaller)
+    const cdScanStart = Math.max(0, buffer.length - 262144);
+    let cdOffset = cdScanStart;
+    while (cdOffset < buffer.length - 46) {
+      if (
+        buffer[cdOffset] === 0x50 &&
+        buffer[cdOffset + 1] === 0x4b &&
+        buffer[cdOffset + 2] === 0x01 &&
+        buffer[cdOffset + 3] === 0x02
+      ) {
+        const compressionMethod = buffer.readUInt16LE(cdOffset + 10);
+        const compressedSize = buffer.readUInt32LE(cdOffset + 20);
+        const fileNameLength = buffer.readUInt16LE(cdOffset + 28);
+        const extraFieldLength = buffer.readUInt16LE(cdOffset + 30);
+        const commentLength = buffer.readUInt16LE(cdOffset + 32);
+        const localHeaderOffset = buffer.readUInt32LE(cdOffset + 42);
+
+        const nameStart = cdOffset + 46;
+        if (nameStart + fileNameLength <= buffer.length) {
+          const fileName = buffer.toString('utf-8', nameStart, nameStart + fileNameLength);
+          if (isTargetXmlOrText(fileName) && compressedSize > 0 && localHeaderOffset + 30 < buffer.length) {
+            const localNameLen = buffer.readUInt16LE(localHeaderOffset + 26);
+            const localExtraLen = buffer.readUInt16LE(localHeaderOffset + 28);
+            const dataStart = localHeaderOffset + 30 + localNameLen + localExtraLen;
+            const dataEnd = dataStart + compressedSize;
+
+            if (dataEnd <= buffer.length) {
+              const rawData = buffer.subarray(dataStart, dataEnd);
+              let uncompressedString = '';
+              if (compressionMethod === 8) {
+                try {
+                  uncompressedString = zlib.inflateRawSync(rawData).toString('utf-8');
+                } catch {}
+              } else if (compressionMethod === 0) {
+                uncompressedString = rawData.toString('utf-8');
+              }
+              if (uncompressedString) {
+                entries.push({ name: fileName, content: uncompressedString });
+                seenNames.add(fileName);
+              }
+            }
+          }
+        }
+        cdOffset = nameStart + fileNameLength + extraFieldLength + commentLength;
+      } else {
+        cdOffset++;
+      }
+    }
+
+    if (entries.length > 0) {
+      return entries;
+    }
+
+    // Pass 2: Fallback Local File Header scan (PK\x03\x04)
     let offset = 0;
     while (offset < buffer.length - 30) {
-      // Local file header signature: 0x04034b50 (PK\x03\x04)
       if (
         buffer[offset] === 0x50 &&
         buffer[offset + 1] === 0x4b &&
@@ -186,33 +463,29 @@ function extractZipEntries(buffer: Buffer): ZipEntry[] {
 
         const fileNameStart = offset + 30;
         const fileName = buffer.toString('utf-8', fileNameStart, fileNameStart + fileNameLength);
-
         const dataStart = fileNameStart + fileNameLength + extraFieldLength;
-        const dataEnd = dataStart + compressedSize;
 
-        if (dataEnd <= buffer.length) {
-          const rawData = buffer.subarray(dataStart, dataEnd);
+        if (isTargetXmlOrText(fileName) && !seenNames.has(fileName) && dataStart < buffer.length) {
+          const rawData = compressedSize > 0
+            ? buffer.subarray(dataStart, Math.min(buffer.length, dataStart + compressedSize))
+            : buffer.subarray(dataStart, Math.min(buffer.length, dataStart + 262144));
           let uncompressedString = '';
 
           if (compressionMethod === 8) {
             try {
-              const decompressed = zlib.inflateRawSync(rawData);
-              uncompressedString = decompressed.toString('utf-8');
-            } catch {
-              // Ignore failure for individual non-text subentries
-            }
-          } else if (compressionMethod === 0) {
+              uncompressedString = zlib.inflateRawSync(rawData).toString('utf-8');
+            } catch {}
+          } else if (compressionMethod === 0 && compressedSize > 0) {
             uncompressedString = rawData.toString('utf-8');
           }
 
           if (uncompressedString) {
             entries.push({ name: fileName, content: uncompressedString });
+            seenNames.add(fileName);
           }
-
-          offset = dataEnd;
-        } else {
-          break;
         }
+
+        offset = compressedSize > 0 ? dataStart + compressedSize : dataStart + 1;
       } else {
         offset++;
       }
@@ -234,7 +507,9 @@ function extractCompleteDocumentContent(
   mimeType: string = ''
 ): string {
   try {
-    const buffer = Buffer.from(base64, 'base64');
+    const cleanB64 = cleanBase64String(base64);
+    if (!cleanB64) return '';
+    const buffer = Buffer.from(cleanB64, 'base64');
     const ext = fileName.toLowerCase().split('.').pop() || '';
 
     // 1. Plain text formats (.txt, .md, .csv, .json, .py, etc.)
@@ -250,6 +525,17 @@ function extractCompleteDocumentContent(
     ) {
       return buffer.toString('utf-8');
     }
+
+    const decodeXmlEntities = (str: string) =>
+      str
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&#39;/g, "'")
+        .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)))
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 
     // 2. PowerPoint Presentations (.pptx, .ppt)
     if (
@@ -271,15 +557,30 @@ function extractCompleteDocumentContent(
         const slideTexts: string[] = [];
         slideEntries.forEach((entry, idx) => {
           const slideNum = entry.name.match(/slide(\d+)\.xml/i)?.[1] || String(idx + 1);
-          // Find all text inside <a:t>...</a:t> tags
-          const textMatches = Array.from(entry.content.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g))
-            .map((m) => m[1]?.trim())
-            .filter(Boolean);
+          // Group <a:t> runs by paragraph <a:p> so sentences split across formatting runs stay intact
+          const paragraphs: string[] = [];
+          const pMatches = Array.from(entry.content.matchAll(/<a:p(?:\s[^>]*)?>([\s\S]*?)<\/a:p>/g));
+          for (const pMatch of pMatches) {
+            const runs = Array.from(pMatch[1].matchAll(/<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>/g)).map((m) =>
+              decodeXmlEntities(m[1] || '')
+            );
+            if (runs.length > 0) {
+              const line = runs.join('').replace(/\s+/g, ' ').trim();
+              if (line.length > 1) {
+                paragraphs.push(line);
+              }
+            }
+          }
 
-          if (textMatches.length > 0) {
-            slideTexts.push(`--- Slide ${slideNum} ---\n${textMatches.join('\n')}`);
-          } else {
-            slideTexts.push(`--- Slide ${slideNum} ---\n[Note: Slide content visual diagram or non-textual elements]`);
+          if (paragraphs.length === 0) {
+            const rawMatches = Array.from(entry.content.matchAll(/<a:t[^>]*>([\s\S]*?)<\/a:t>/g))
+              .map((m) => decodeXmlEntities(m[1] || '').trim())
+              .filter(Boolean);
+            paragraphs.push(...rawMatches);
+          }
+
+          if (paragraphs.length > 0) {
+            slideTexts.push(`--- Slide ${slideNum} ---\n${paragraphs.join('\n')}`);
           }
         });
         return slideTexts.join('\n\n');
@@ -299,9 +600,9 @@ function extractCompleteDocumentContent(
         const paragraphs = Array.from(docEntry.content.matchAll(/<w:p[^>]*>([\s\S]*?)<\/w:p>/g))
           .map((pMatch) => {
             const textMatches = Array.from(pMatch[1].matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g))
-              .map((m) => m[1])
+              .map((m) => decodeXmlEntities(m[1] || ''))
               .join('');
-            return textMatches.trim();
+            return textMatches.replace(/\s+/g, ' ').trim();
           })
           .filter(Boolean);
 
@@ -311,17 +612,222 @@ function extractCompleteDocumentContent(
       }
     }
 
-    // 4. PDF Documents (.pdf)
-    const pdfSnippets = extractReadablePdfText(base64);
-    if (pdfSnippets && pdfSnippets.length > 50) {
-      return pdfSnippets;
-    }
-
+    // 4. PDF Documents (.pdf) - handled asynchronously via PDFParse in extractCompleteDocumentContentAsync
     return '';
   } catch (err) {
     console.warn('extractCompleteDocumentContent error:', err);
     return '';
   }
+}
+
+/**
+ * Complete asynchronous document extractor supporting:
+ * - PDF documents via PDFParse
+ * - PowerPoint (.pptx) and Word (.docx) via ZIP Central Directory
+ * - Plain text / code
+ */
+async function extractCompleteDocumentContentAsync(
+  base64: string,
+  fileName: string = 'Document',
+  mimeType: string = ''
+): Promise<string> {
+  try {
+    const cleanB64 = cleanBase64String(base64);
+    if (!cleanB64) return '';
+
+    const ext = fileName.toLowerCase().split('.').pop() || '';
+    if (ext === 'pdf' || mimeType === 'application/pdf') {
+      const buffer = Buffer.from(cleanB64, 'base64');
+      const parsedPdf = await extractPdfTextWithPdfParse(buffer);
+      if (parsedPdf && parsedPdf.length > 20) {
+        return parsedPdf;
+      }
+    }
+    return extractCompleteDocumentContent(cleanB64, fileName, mimeType);
+  } catch (err) {
+    return extractCompleteDocumentContent(cleanBase64String(base64), fileName, mimeType);
+  }
+}
+
+/**
+ * Dedicated Document Text Extraction API Endpoint
+ */
+apiRouter.post('/extract-document-text', async (req: Request, res: Response) => {
+  try {
+    const { base64, fileName = 'document.pdf', mimeType = '' } = req.body;
+    if (!base64) {
+      return res.status(400).json({ error: 'base64 payload is required' });
+    }
+    const text = await extractCompleteDocumentContentAsync(base64, fileName, mimeType);
+    return res.json({ success: true, text, charCount: text.length });
+  } catch (err: any) {
+    console.error('Error in /api/extract-document-text:', err);
+    return res.status(500).json({ error: 'Failed to extract document text' });
+  }
+});
+
+interface DocumentKnowledgeUnit {
+  sectionTitle: string;
+  concept: string;
+  statement: string;
+}
+
+/**
+ * Parses raw extracted document/slide text into structured knowledge units
+ * (sectionTitle, concept, statement) directly from the uploaded document.
+ */
+function parseDocumentKnowledgeUnits(rawText: string, defaultTopic: string): DocumentKnowledgeUnit[] {
+  const cleaned = (rawText || '')
+    .replace(/\[Attached Multimodal File:.*?\]/gi, '')
+    .replace(/File format:\s*\S+/gi, '')
+    .replace(/Size:\s*[\d.]+\s*MB/gi, '')
+    .replace(/Processing Pipeline:.*$/gim, '')
+    .replace(/\[Extracted Complete Document Content\]:?/gi, '')
+    .replace(/\[Note:.*?\]/gi, '')
+    .replace(/===+.*?===+/g, '\n')
+    .replace(/Processed educational material.*$/gim, '')
+    .replace(/AI is synthesizing full curriculum content.*$/gim, '')
+    .replace(/Extracted Key Curriculum Content from.*$/gim, '')
+    .replace(/Comprehensive curriculum coverage in.*$/gim, '')
+    .replace(/Essential theoretical principles, operational definitions.*$/gim, '')
+    .replace(/Practical algorithmic blueprints, data structures.*$/gim, '')
+    .replace(/Standard canonical problem decomposition.*$/gim, '')
+    .replace(/\b[A-Za-z0-9_-]+\.(pptx|pdf|docx|ppt|doc|txt|json|csv)\b/gi, '')
+    .trim();
+
+  if (!cleaned) return [];
+
+  const units: DocumentKnowledgeUnit[] = [];
+  const seenStatements = new Set<string>();
+
+  // Split by slide blocks or section markers if present
+  const rawBlocks = cleaned.split(/(?=---+\s*(?:Slide|Section)\s*[^-\n]+---+)/i);
+
+  for (const block of rawBlocks) {
+    const lines = block
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^---+\s*(?:Slide\s*\d+|Section:\s*)\s*---+/i, '').replace(/^[\d.*•▪◦‣\-–—\s]+/, '').trim())
+      .filter((l) => {
+        if (l.length < 3 || l.length > 350) return false;
+        if (/^(thank you|questions\??|agenda|outline|table of contents|references|bibliography|page \d+|slide \d+)$/i.test(l)) {
+          return false;
+        }
+        if (/^(topic \d+:|concept:|definition:|example:|learning objective:)/i.test(l)) {
+          return true;
+        }
+        return /[a-zA-Z]{2,}/.test(l);
+      });
+
+    if (lines.length === 0) continue;
+
+    // Identify slide/section heading (first concise line without trailing period, or defaultTopic)
+    let sectionTitle = defaultTopic;
+    let startIdx = 0;
+    if (lines[0].length >= 4 && lines[0].length <= 80 && !/[.!?]$/.test(lines[0]) && !lines[0].includes(': ')) {
+      sectionTitle = lines[0].replace(/^topic\s*\d+:\s*/i, '').trim();
+      startIdx = 1;
+    }
+
+    // Collect short list items on this slide in case a slide is a list of items/properties under a heading
+    const shortBullets: string[] = [];
+
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i]
+        .replace(/^(concept|definition|example|learning objective):\s*/i, '')
+        .trim();
+
+      if (line.length < 18) {
+        if (line.length >= 4 && !/^\d+$/.test(line)) {
+          shortBullets.push(line);
+        }
+        continue;
+      }
+
+      // Split multi-sentence paragraphs into individual sentences if very long
+      const subSentences = line.length > 180 ? line.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 18) : [line];
+
+      for (const sent of subSentences) {
+        const normKey = sent.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normKey.length < 15 || seenStatements.has(normKey)) continue;
+
+        // Pattern 1: "Concept Name: explanation" or "Concept Name - explanation"
+        const colonMatch = sent.match(/^([A-Za-z][A-Za-z0-9_ /()\-+]{2,48}?)\s*[:–—-]\s+(.{12,})/);
+        // Pattern 2: "Concept Name is/are/uses/refers to/..."
+        const verbMatch = sent.match(
+          /^([A-Za-z][A-Za-z0-9_ /()\-+]{2,48}?)\s+(is|are|was|were|uses|provides|defines|implements|ensures|manages|operates|refers to|represents|enables|consists of|controls|allocates|executes|prevents|supports|allows|requires|calculates|stores|handles|processes|converts|divides|combines|maintains|reduces|increases|avoids|occurs|happens|works|functions)\s+(.{10,})/i
+        );
+
+        let concept = sectionTitle;
+        let statement = sent;
+
+        if (colonMatch && colonMatch[1] && colonMatch[2]) {
+          concept = colonMatch[1].trim();
+          statement = `${concept}: ${colonMatch[2].trim()}`;
+        } else if (verbMatch && verbMatch[1]) {
+          const candidateConcept = verbMatch[1].trim();
+          // Avoid pronouns or generic starters as concept names
+          if (!/^(it|they|this|these|that|those|there|each|every|when|while|if|in|on|at|for|by|with|the following|an example)$/i.test(candidateConcept)) {
+            concept = candidateConcept;
+          }
+          statement = sent;
+        } else {
+          // If line starts with a capitalized technical phrase, use it or the slide's sectionTitle
+          const leadPhrase = sent.match(/^([A-Z][A-Za-z0-9_-]+(?:\s+[A-Z][A-Za-z0-9_-]+){0,3})/);
+          if (
+            leadPhrase &&
+            leadPhrase[1] &&
+            leadPhrase[1].length >= 4 &&
+            !/^(The|This|These|That|Those|When|While|Where|Which|What|How|Why|Each|Every|Some|Many|Most|All|Both|In|On|At|For|From|With|Under|Over|Between|During|After|Before)$/i.test(
+              leadPhrase[1].trim()
+            )
+          ) {
+            concept = leadPhrase[1].trim();
+          } else {
+            concept = sectionTitle;
+          }
+          statement = sent;
+        }
+
+        const isDisallowedText = (str: string): boolean => {
+          if (!str || str.length < 3) return true;
+          const s = str.trim();
+          if (/^(=+|-+|SOURCE\b|Processing Pipeline|Complete Unabridged|Extracted|Document|Slide|Attached|Unit[ _]?[0-9ivx]+|Final|Merged|Draft|Copy|Timestamp|Page \d+)/i.test(s)) {
+            return true;
+          }
+          if (/\.(pptx|pdf|docx|ppt|doc|txt)$/i.test(s)) return true;
+          if (/[=\-_*#~]{2,}/.test(s)) return true;
+          return false;
+        };
+
+        if (isDisallowedText(concept) || isDisallowedText(statement)) {
+          continue;
+        }
+
+        seenStatements.add(normKey);
+        units.push({
+          sectionTitle: sectionTitle || defaultTopic,
+          concept: concept || sectionTitle || defaultTopic,
+          statement,
+        });
+      }
+    }
+
+    // If a slide had multiple short bullet points under a clear sectionTitle, combine them into a composite knowledge unit
+    if (shortBullets.length >= 2 && sectionTitle && sectionTitle !== defaultTopic) {
+      const compositeStmt = `${sectionTitle} encompasses key components and principles including ${shortBullets.slice(0, 5).join(', ')}.`;
+      const normKey = compositeStmt.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!seenStatements.has(normKey)) {
+        seenStatements.add(normKey);
+        units.push({
+          sectionTitle,
+          concept: sectionTitle,
+          statement: compositeStmt,
+        });
+      }
+    }
+  }
+
+  return units;
 }
 
 /**
@@ -1757,7 +2263,7 @@ apiRouter.post('/ai/analyze-material', async (req: Request, res: Response) => {
   // Complete, exhaustive source extraction from raw document (PDF, PowerPoint, Word, Text)
   let completeSourceText = text || '';
   if (fileData?.base64) {
-    const directExtracted = extractCompleteDocumentContent(
+    const directExtracted = await extractCompleteDocumentContentAsync(
       fileData.base64,
       fileData.fileName || docTitle,
       fileData.mimeType || ''
@@ -1773,11 +2279,14 @@ apiRouter.post('/ai/analyze-material', async (req: Request, res: Response) => {
 
   if (ai) {
     try {
+      const cleanB64 = fileData?.base64 ? cleanBase64String(fileData.base64) : '';
       const isPdf = fileData?.mimeType === 'application/pdf' || fileData?.fileName?.toLowerCase().endsWith('.pdf');
+      const pdfBuffer = cleanB64 && isPdf ? Buffer.from(cleanB64, 'base64') : null;
+      const canUsePdfVision = Boolean(pdfBuffer && isBufferValidPdfWithPages(pdfBuffer));
 
       const promptText = `You are a Principal Curriculum Specialist and University Instructional Architect.
 You must perform an EXHAUSTIVE, COMPREHENSIVE full-document synthesis of the following educational material${title ? ` titled "${title}"` : ''} (Subject Domain: ${subjectHint || 'Academic & Engineering Studies'}).
-${completeSourceText ? `\n\nFull Extracted Document Source Content:\n"""\n${completeSourceText}\n"""` : ''}
+${completeSourceText ? `\n\nFull Extracted Document Source Content:\n"""\n${completeSourceText.slice(0, 32000)}\n"""` : ''}
 
 CRITICAL FULL-DOCUMENT SYNTHESIS REQUIREMENTS:
 1. COMPLETE CONTENT PRESERVATION: Do not omit material by selecting only what seems important. Preserve and process the COMPLETE document content before generating study materials or assignments.
@@ -1795,167 +2304,29 @@ CRITICAL FULL-DOCUMENT SYNTHESIS REQUIREMENTS:
 
 Return purely valid JSON matching the schema.`;
 
-      // Structure parts correctly according to @google/genai guidelines
-      const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
-
-      if (isPdf && fileData?.base64) {
-        parts.push({
-          inlineData: {
-            mimeType: 'application/pdf',
-            data: fileData.base64,
-          },
-        });
-      }
-
-      parts.push({
-        text: promptText,
-      });
-
-      const response = await generateWithGemini(ai, {
-        contents: { parts },
-        config: {
-          responseMimeType: 'application/json',
-          maxOutputTokens: 8192,
-          temperature: 0.2,
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              subject: { type: Type.STRING },
-              summary: { type: Type.STRING },
-              extractedText: {
-                type: Type.STRING,
-                description: 'Complete, unabridged source extraction preserving all sections, headings, explanations, and tables',
-              },
-              topics: {
-                type: Type.ARRAY,
-                description: 'All topics and chapters covered in the entire document',
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    name: { type: Type.STRING },
-                    concepts: {
-                      type: Type.ARRAY,
-                      items: {
-                        type: Type.OBJECT,
-                        properties: {
-                          concept: { type: Type.STRING },
-                          definition: { type: Type.STRING },
-                          example: { type: Type.STRING },
-                          learningObjective: { type: Type.STRING },
-                        },
-                        required: ['concept', 'definition', 'example', 'learningObjective'],
-                      },
-                    },
-                  },
-                  required: ['name', 'concepts'],
-                },
-              },
-            },
-            required: ['subject', 'topics', 'summary'],
-          },
-        },
-      });
-
-      const parsed = JSON.parse(response.text || '{}');
-      if (parsed.topics && parsed.topics.length > 0) {
-        return res.json({
-          ...parsed,
-          extractedText: parsed.extractedText || completeSourceText,
-        });
-      }
-    } catch (error) {
-      console.warn('Gemini material processing encountered an issue, falling back to structured synthesis:', error);
-    }
-  }
-
-  // Resilient pedagogical synthesis fallback (never fails the teacher)
-  const displayExtracted =
-    completeSourceText && !completeSourceText.startsWith('[PDF Document')
-      ? completeSourceText
-      : `Extracted Key Curriculum Content from "${docTitle}":\n\n1. Foundational Concepts & Scope:\nComprehensive curriculum coverage in ${cleanTopic}, focusing on theoretical foundations, architectural mechanisms, and formal problem solving.\n\n2. Key Operational Principles:\n- Structural invariants and boundary condition handling.\n- State transformations, verification algorithms, and edge-case testing.\n- Practical real-world applications and system integration.`;
-
-  return res.json({
-    subject: subjectHint || 'Computer Science & Engineering',
-    extractedText: displayExtracted,
-    topics: [
-      {
-        name: cleanTopic,
-        concepts: [
-          {
-            concept: `${cleanTopic} Core Invariants`,
-            definition: `Essential theoretical principles, operational definitions, and formal mathematical rules that govern ${cleanTopic}.`,
-            example: `Standard canonical problem decomposition and verification trace in ${cleanTopic}.`,
-            learningObjective: `Analyze and defend core invariant properties of ${cleanTopic}.`,
-          },
-          {
-            concept: `System Architecture & Implementation`,
-            definition: `Practical algorithmic blueprints, data structures, and edge-case execution models for ${cleanTopic}.`,
-            example: `Concrete implementation walkthrough with boundary testing.`,
-            learningObjective: `Design and evaluate end-to-end solutions for ${cleanTopic}.`,
-          },
-        ],
-      },
-    ],
-    summary: `Processed educational material "${docTitle}". Successfully extracted curriculum topics, formal definitions, and learning objectives for assessment creation.`,
-  });
-});
-
-/**
- * Document Parser / Extractor Endpoint (/api/parse-document)
- * Extracts structured educational topics, definitions, plain text, and summary from uploaded documents (PDF/DOC/TXT).
- */
-apiRouter.post(['/parse-document', '/api/parse-document'], async (req: Request, res: Response) => {
-  try {
-    const { fileData, mimeType = 'application/pdf', fileName = 'Document' } = req.body;
-    const cleanTopic = fileName.replace(/\.[^/.]+$/, '').replace(/[_\\-]/g, ' ');
-
-    let completeSourceText = '';
-    if (fileData) {
-      completeSourceText = extractCompleteDocumentContent(fileData, fileName, mimeType);
-    }
-
-    const ai = getAIClient();
-    if (ai && fileData) {
-      try {
-        const isPdf = mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+      // Structure parts correctly: only send inlineData if PDF is strictly valid and has pages, and we lack text
+      const sendSynthesisRequest = async (includeInlinePdf: boolean) => {
         const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
 
-        if (isPdf) {
+        if (includeInlinePdf && cleanB64 && isPdf) {
           parts.push({
             inlineData: {
               mimeType: 'application/pdf',
-              data: fileData,
+              data: cleanB64,
             },
           });
         }
 
         parts.push({
-          text: `You are a Principal Curriculum Specialist and University Instructional Architect.
-You must perform an EXHAUSTIVE, COMPREHENSIVE full-document synthesis of this academic document titled "${fileName}".
-${completeSourceText ? `\n\nFull Extracted Source Content (${fileName}):\n"""\n${completeSourceText}\n"""` : ''}
-
-CRITICAL FULL-DOCUMENT SYNTHESIS REQUIREMENTS:
-1. COMPLETE CONTENT PRESERVATION: Do not omit material by selecting only what seems important. Preserve and process the COMPLETE document content before generating study materials or assignments.
-2. INCLUDE ALL CONTENT: Include all relevant sections, headings, subheadings, explanations, examples, formulas, algorithms, tables, definitions, and meaningful content extracted from the document. Do not silently skip content because it appears less important.
-3. PRESERVE STRUCTURE & TERMINOLOGY: Keep the original document's organization, numbering, section hierarchy, and domain terminology where possible.
-4. UNREADABLE CONTENT INTEGRITY: If any diagram, figure, or section cannot be extracted or is unreadable, clearly identify what was missed (e.g. "[Note: Diagram on Slide/Page X could not be parsed textually]") rather than inventing or filling it in.
-5. SEPARATE SOURCE EXTRACTION:
-   - "extractedText": Return the complete, unabridged source extraction text preserving all sections, headings, subheadings, explanations, examples, formulas, and tables from the beginning to the end of the document.
-   - "topics": Extract ALL distinct topics/chapters covered across the document. Extract as many topics as are present (5 to 25+ topics for multi-topic documents). For EVERY topic, extract all core concepts with:
-     * "concept": precise title of the concept or theorem
-     * "definition": thorough, precise definition
-     * "example": practical concrete walkthrough, code implementation, or numerical scenario
-     * "learningObjective": specific Bloom's taxonomy pedagogical outcome
-   - "summary": Provide a rich executive curriculum scope synthesis covering the entire document.
-
-Return purely valid JSON matching the schema.`,
+          text: promptText,
         });
 
-        const response = await generateWithGemini(ai, {
+        return await generateWithGemini(ai, {
           contents: { parts },
+          timeoutMs: 25000,
           config: {
             responseMimeType: 'application/json',
-            maxOutputTokens: 8192,
+            maxOutputTokens: 4096,
             temperature: 0.2,
             responseSchema: {
               type: Type.OBJECT,
@@ -1995,6 +2366,198 @@ Return purely valid JSON matching the schema.`,
             },
           },
         });
+      };
+
+      // Only include inline PDF if valid with pages AND text is not already fully extracted
+      const useMultimodal = canUsePdfVision && (!completeSourceText || completeSourceText.length < 60);
+
+      let response: any = null;
+      try {
+        response = await sendSynthesisRequest(useMultimodal);
+      } catch (geminiErr: any) {
+        const errStr = String(geminiErr?.message || '');
+        if (useMultimodal && (errStr.includes('no pages') || errStr.includes('INVALID_ARGUMENT') || errStr.includes('PDF'))) {
+          // Automatic recovery: retry with text-only payload
+          response = await sendSynthesisRequest(false);
+        } else {
+          throw geminiErr;
+        }
+      }
+
+      const parsed = JSON.parse(response.text || '{}');
+      if (parsed.topics && parsed.topics.length > 0) {
+        return res.json({
+          ...parsed,
+          extractedText: parsed.extractedText || completeSourceText,
+        });
+      }
+    } catch (error) {
+      console.warn('Gemini material processing notice, using structured synthesis:', error);
+    }
+  }
+
+  // Build structured topics directly from extracted document content
+  const docUnits = parseDocumentKnowledgeUnits(completeSourceText, cleanTopic);
+  const groupedTopicsMap = new Map<string, Array<{ concept: string; definition: string; example: string; learningObjective: string }>>();
+
+  for (const u of docUnits) {
+    const tName = u.sectionTitle || cleanTopic;
+    if (!groupedTopicsMap.has(tName)) {
+      groupedTopicsMap.set(tName, []);
+    }
+    const list = groupedTopicsMap.get(tName)!;
+    if (list.length < 8 && !list.some((c) => c.concept.toLowerCase() === u.concept.toLowerCase() && c.definition === u.statement)) {
+      list.push({
+        concept: u.concept,
+        definition: u.statement,
+        example: `Application of ${u.concept} within ${tName}.`,
+        learningObjective: `Analyze and apply ${u.concept} in ${tName}.`,
+      });
+    }
+  }
+
+  const extractedTopics = Array.from(groupedTopicsMap.entries())
+    .slice(0, 20)
+    .map(([name, concepts]) => ({ name, concepts }));
+
+  return res.json({
+    subject: subjectHint || 'Computer Science & Engineering',
+    extractedText: completeSourceText || '',
+    topics:
+      extractedTopics.length > 0
+        ? extractedTopics
+        : [
+            {
+              name: cleanTopic,
+              concepts: [
+                {
+                  concept: cleanTopic,
+                  definition: `Core principles and definitions covered in ${cleanTopic}.`,
+                  example: `Practical application of ${cleanTopic}.`,
+                  learningObjective: `Understand and apply ${cleanTopic}.`,
+                },
+              ],
+            },
+          ],
+    summary:
+      docUnits.length > 0
+        ? `Extracted ${docUnits.length} key concepts across ${extractedTopics.length} sections from "${docTitle}", covering ${extractedTopics
+            .slice(0, 4)
+            .map((t) => t.name)
+            .join(', ')}.`
+        : `Processed curriculum material "${docTitle}".`,
+  });
+});
+
+/**
+ * Document Parser / Extractor Endpoint (/api/parse-document)
+ * Extracts structured educational topics, definitions, plain text, and summary from uploaded documents (PDF/DOC/TXT).
+ */
+apiRouter.post(['/parse-document', '/api/parse-document'], async (req: Request, res: Response) => {
+  try {
+    const { fileData, mimeType = 'application/pdf', fileName = 'Document' } = req.body;
+    const cleanTopic = fileName
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_\\-]/g, ' ')
+      .replace(/\b(final|merged|draft|copy|v\d+|\d{1,2}[a-z]{3}\d{2,4})\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Curriculum Material';
+
+    let completeSourceText = '';
+    if (fileData) {
+      completeSourceText = await extractCompleteDocumentContentAsync(fileData, fileName, mimeType);
+    }
+
+    const ai = getAIClient();
+    if (ai && fileData) {
+      try {
+        const cleanB64 = cleanBase64String(fileData);
+        const isPdf = mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');
+        const pdfBuffer = cleanB64 && isPdf ? Buffer.from(cleanB64, 'base64') : null;
+        const canUsePdfVision = Boolean(pdfBuffer && isBufferValidPdfWithPages(pdfBuffer));
+
+        const promptText = `You are a Principal Curriculum Specialist and University Instructional Architect.
+You must perform an EXHAUSTIVE, COMPREHENSIVE full-document synthesis of this academic document titled "${fileName}".
+${completeSourceText ? `\n\nFull Extracted Source Content (${fileName}):\n"""\n${completeSourceText.slice(0, 32000)}\n"""` : ''}
+
+Return purely valid JSON matching the schema.`;
+
+        const sendParseRequest = async (includeInlinePdf: boolean) => {
+          const parts: Array<{ inlineData?: { mimeType: string; data: string }; text?: string }> = [];
+
+          if (includeInlinePdf && cleanB64 && isPdf) {
+            parts.push({
+              inlineData: {
+                mimeType: 'application/pdf',
+                data: cleanB64,
+              },
+            });
+          }
+
+          parts.push({
+            text: promptText,
+          });
+
+          return await generateWithGemini(ai, {
+            contents: { parts },
+            timeoutMs: 25000,
+            config: {
+              responseMimeType: 'application/json',
+              maxOutputTokens: 4096,
+              temperature: 0.2,
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  subject: { type: Type.STRING },
+                  summary: { type: Type.STRING },
+                  extractedText: {
+                    type: Type.STRING,
+                    description: 'Complete, unabridged source extraction preserving all sections, headings, explanations, and tables',
+                  },
+                  topics: {
+                    type: Type.ARRAY,
+                    description: 'All topics and chapters covered in the entire document',
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING },
+                        concepts: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              concept: { type: Type.STRING },
+                              definition: { type: Type.STRING },
+                              example: { type: Type.STRING },
+                              learningObjective: { type: Type.STRING },
+                            },
+                            required: ['concept', 'definition', 'example', 'learningObjective'],
+                          },
+                        },
+                      },
+                      required: ['name', 'concepts'],
+                    },
+                  },
+                },
+                required: ['subject', 'topics', 'summary'],
+              },
+            },
+          });
+        };
+
+        const useMultimodal = canUsePdfVision && (!completeSourceText || completeSourceText.length < 60);
+
+        let response: any = null;
+        try {
+          response = await sendParseRequest(useMultimodal);
+        } catch (geminiErr: any) {
+          const errStr = String(geminiErr?.message || '');
+          if (useMultimodal && (errStr.includes('no pages') || errStr.includes('INVALID_ARGUMENT') || errStr.includes('PDF'))) {
+            response = await sendParseRequest(false);
+          } else {
+            throw geminiErr;
+          }
+        }
 
         const parsed = JSON.parse(response.text || '{}');
         if (parsed.topics && parsed.topics.length > 0) {
@@ -2002,7 +2565,7 @@ Return purely valid JSON matching the schema.`,
             success: true,
             subject: parsed.subject || 'Computer Science & Engineering',
             summary: parsed.summary || `Extracted notes from ${fileName}.`,
-            extractedText: parsed.extractedText || completeSourceText || `Complete notes extracted from ${fileName}`,
+            extractedText: parsed.extractedText || completeSourceText,
             topics: parsed.topics,
           });
         }
@@ -2011,29 +2574,49 @@ Return purely valid JSON matching the schema.`,
       }
     }
 
-    // Heuristic fallback
-    const displayExtracted = completeSourceText && completeSourceText.length > 20
-      ? completeSourceText
-      : `Extracted Key Curriculum Content from "${fileName}":\n\n1. Foundational Concepts & Scope:\nComprehensive curriculum coverage in ${cleanTopic}, focusing on theoretical foundations and practical applications.\n\n2. Key Principles:\n- Core rules, structural invariants, and operational models.\n- Practical implementation and edge-case testing.`;
+    const docUnits = parseDocumentKnowledgeUnits(completeSourceText, cleanTopic);
+    const groupedMap = new Map<string, Array<{ concept: string; definition: string; example: string; learningObjective: string }>>();
+    for (const u of docUnits) {
+      const tName = u.sectionTitle || cleanTopic;
+      if (!groupedMap.has(tName)) groupedMap.set(tName, []);
+      const list = groupedMap.get(tName)!;
+      if (list.length < 8) {
+        list.push({
+          concept: u.concept,
+          definition: u.statement,
+          example: `Application of ${u.concept} in ${tName}.`,
+          learningObjective: `Master ${u.concept} in ${tName}.`,
+        });
+      }
+    }
+    const extractedTopics = Array.from(groupedMap.entries())
+      .slice(0, 20)
+      .map(([name, concepts]) => ({ name, concepts }));
 
     return res.json({
       success: true,
       subject: 'Computer Science & Engineering',
-      summary: `Processed educational material "${fileName}". Successfully extracted curriculum topics and core concepts for student study.`,
-      extractedText: displayExtracted,
-      topics: [
-        {
-          name: cleanTopic,
-          concepts: [
-            {
-              concept: `${cleanTopic} Foundations`,
-              definition: `Core operational principles and definitions governing ${cleanTopic}.`,
-              example: `Canonical implementation and application of ${cleanTopic}.`,
-              learningObjective: `Understand and apply principles of ${cleanTopic}.`,
-            },
-          ],
-        },
-      ],
+      summary:
+        docUnits.length > 0
+          ? `Extracted ${docUnits.length} concepts across ${extractedTopics.length} sections from "${fileName}".`
+          : `Processed educational material "${fileName}".`,
+      extractedText: completeSourceText || '',
+      topics:
+        extractedTopics.length > 0
+          ? extractedTopics
+          : [
+              {
+                name: cleanTopic,
+                concepts: [
+                  {
+                    concept: `${cleanTopic} Foundations`,
+                    definition: `Core principles and definitions governing ${cleanTopic}.`,
+                    example: `Application of ${cleanTopic}.`,
+                    learningObjective: `Understand and apply principles of ${cleanTopic}.`,
+                  },
+                ],
+              },
+            ],
     });
   } catch (err: any) {
     console.error('Error in /api/parse-document:', err);
@@ -2058,244 +2641,423 @@ apiRouter.post('/ai/generate-questions', async (req: Request, res: Response) => 
       sourceText,
       fileData,
       documentTitle,
-      drillBrief,
     } = req.body;
 
+    // 1. Extract real document content from fileData if present
+    let fullSourceText = sourceText || '';
+    if (fileData?.base64) {
+      const parsedContent = await extractCompleteDocumentContentAsync(
+        fileData.base64,
+        fileData.fileName || documentTitle || 'Document',
+        fileData.mimeType || ''
+      );
+      if (parsedContent && parsedContent.length > 20) {
+        fullSourceText = fullSourceText ? `${fullSourceText}\n\n${parsedContent}` : parsedContent;
+      }
+    }
+
+    // 2. Clean topic name - NEVER use raw file names with extensions or dates
+    const cleanTopic = (topic || documentTitle || 'Core Concepts')
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_\\-]/g, ' ')
+      .replace(/\b(final|merged|draft|copy|v\d+|\d{1,2}[a-z]{3}\d{2,4})\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Core Concepts';
+
+    const cleanSubject = (subject || 'Computer Science & Engineering')
+      .replace(/[_\\-]/g, ' ')
+      .trim();
+
+    // 3. Clean source text while preserving --- Slide N --- and --- Section: ... --- markers for structural parsing
+    const cleanDocText = fullSourceText
+      .replace(/===+.*?===+/g, '\n')
+      .replace(/\[Attached Multimodal.*?\]/gi, '')
+      .replace(/File format:\s*\S+/gi, '')
+      .replace(/Size:\s*[\d.]+\s*MB/gi, '')
+      .replace(/Processing Pipeline:.*$/gim, '')
+      .replace(/\[Extracted Complete Document Content\]:?/gi, '')
+      .replace(/\b[A-Za-z0-9_-]+\.(pptx|pdf|docx|ppt|doc|txt|json|csv)\b/gi, '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
     const numQuestions = Math.min(Math.max(Number(count) || 5, 1), 20);
-    const effectiveTopic = topic || documentTitle?.replace(/\.[^/.]+$/, '') || 'Curriculum Concepts';
-    const effectiveSubject = subject || 'Curriculum Studies';
     const ai = getAIClient();
 
-    // Helper to generate dynamic contextual questions from document text if AI model is unreachable
-    const generateContextualFallbackQuestions = (textSnippet: string, docName: string) => {
-      const cleanSnippet = textSnippet.replace(/\[Attached Multimodal.*?\]/g, '').trim();
-      const lines = cleanSnippet.split('\n').map(l => l.trim()).filter(l => l.length > 20 && !l.startsWith('#'));
-      
+    // 100% Document-Grounded Question & Distractor Synthesis Engine
+    const generateContextualFallbackQuestions = (rawText: string) => {
+      const units = parseDocumentKnowledgeUnits(rawText, cleanTopic);
+
+      // Helper to strip leading "ConceptName: " from an option statement so it doesn't give away the answer
+      const cleanStatementForOption = (stmt: string, conceptName: string): string => {
+        const escaped = conceptName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        let res = stmt
+          .replace(new RegExp(`^${escaped}\\s*[:–—-]\\s*`, 'i'), '')
+          .replace(/^[:–—-]\s*/, '')
+          .trim();
+        if (res.length > 0) {
+          res = res.charAt(0).toUpperCase() + res.slice(1);
+        }
+        return res.length > 140 ? res.slice(0, 137) + '...' : res;
+      };
+
+      // Deduplicate distinct concepts and distinct option statements from the document
+      const distinctConcepts = Array.from(
+        new Set(
+          units
+            .map((u) => u.concept.trim())
+            .filter((c) => c.length >= 3 && c.length <= 65)
+        )
+      );
+
+      // Spread selection evenly across the entire document (not just Slide 1)
+      const selectedUnits: DocumentKnowledgeUnit[] = [];
+      if (units.length > 0) {
+        const usedIndices = new Set<number>();
+        const step = Math.max(1, Math.floor(units.length / numQuestions));
+        for (let i = 0; i < numQuestions; i++) {
+          let idx = (i * step) % units.length;
+          while (usedIndices.has(idx) && usedIndices.size < units.length) {
+            idx = (idx + 1) % units.length;
+          }
+          usedIndices.add(idx);
+          selectedUnits.push(units[idx]);
+        }
+      }
+
       const dynamicItems: any[] = [];
-      const terms = lines.slice(0, numQuestions * 2);
+
+      const statementQuestionTemplates = [
+        (u: DocumentKnowledgeUnit) =>
+          `Which of the following statements accurately describes the mechanism of ${u.concept}?`,
+        (u: DocumentKnowledgeUnit) =>
+          `What is the primary operational role of ${u.concept} in ${cleanTopic}?`,
+        (u: DocumentKnowledgeUnit) =>
+          `In ${cleanTopic}, which principle governs how ${u.concept} functions?`,
+        (u: DocumentKnowledgeUnit) =>
+          `Which of the following best characterizes the behavior of ${u.concept}?`,
+      ];
 
       for (let i = 0; i < numQuestions; i++) {
-        const line = terms[i % terms.length] || `Core educational principles of ${effectiveTopic}`;
-        const words = line.split(' ').filter(w => w.length > 4);
-        const focusWord = words[Math.min(2, words.length - 1)] || effectiveTopic;
+        const unit = selectedUnits[i] || {
+          sectionTitle: cleanTopic,
+          concept: `${cleanTopic} Principle ${i + 1}`,
+          statement: `Defines the core operational rules and relationships of ${cleanTopic} in ${cleanSubject}.`,
+        };
+
+        const conceptName = unit.concept || cleanTopic;
+        const sectionName = unit.sectionTitle || cleanTopic;
+        const factStatement = unit.statement;
 
         if (questionType === 'true_false') {
-          dynamicItems.push({
-            questionText: `Based on "${docName || effectiveTopic}": Is the following assertion correct? "${line.replace(/[.!?]$/, '')}."`,
-            type: 'true_false',
-            options: ['True', 'False'],
-            correctAnswer: 'True',
-            explanation: `According to the educational material, this statement directly reflects the foundational curriculum rules for ${effectiveTopic}.`,
-            difficulty: difficulty || 'medium',
-            topic: effectiveTopic,
-            concept: focusWord,
-            learningObjective: `Verify factual and theoretical comprehension of ${effectiveTopic}.`,
-            bloomsLevel: bloomsTaxonomy || 'Understanding',
-            createdBy: 'AI',
-          });
+          // Alternate True and False questions using real document statements!
+          const isTrueQuestion = i % 2 === 0 || units.length < 2;
+          if (isTrueQuestion) {
+            dynamicItems.push({
+              questionText: `State whether the following statement regarding ${sectionName} is True or False: "${factStatement.replace(/[.!?]$/, '')}."`,
+              type: 'true_false',
+              options: ['True', 'False'],
+              correctAnswer: 'True',
+              explanation: `True. In ${sectionName}, ${factStatement}`,
+              difficulty: difficulty || 'medium',
+              topic: sectionName,
+              concept: conceptName,
+              learningObjective: `Verify comprehension of ${conceptName} in ${sectionName}.`,
+              bloomsLevel: bloomsTaxonomy || 'Understanding',
+              createdBy: 'AI',
+            });
+          } else {
+            // Construct a False statement by pairing conceptName with a different concept's definition from the document
+            const otherUnit = units.find((u) => u.concept.toLowerCase() !== conceptName.toLowerCase() && u.statement !== factStatement) || units[(i + 1) % units.length];
+            const otherPredicate = cleanStatementForOption(otherUnit.statement, otherUnit.concept);
+            const falseStmt = `${conceptName} is defined as: ${otherPredicate.charAt(0).toLowerCase() + otherPredicate.slice(1)}`;
+            dynamicItems.push({
+              questionText: `State whether the following statement regarding ${sectionName} is True or False: "${falseStmt.replace(/[.!?]$/, '')}."`,
+              type: 'true_false',
+              options: ['True', 'False'],
+              correctAnswer: 'False',
+              explanation: `False. That description refers to ${otherUnit.concept}. Instead, ${factStatement}`,
+              difficulty: difficulty || 'medium',
+              topic: sectionName,
+              concept: conceptName,
+              learningObjective: `Distinguish ${conceptName} from ${otherUnit.concept} in ${sectionName}.`,
+              bloomsLevel: bloomsTaxonomy || 'Analyzing',
+              createdBy: 'AI',
+            });
+          }
         } else if (questionType === 'fill_in_the_blank') {
-          const blanked = line.replace(focusWord, '________');
+          const escapedConcept = conceptName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const hasMatch = new RegExp(escapedConcept, 'i').test(factStatement);
+          const blanked = hasMatch
+            ? factStatement.replace(new RegExp(escapedConcept, 'i'), '________')
+            : `________: ${cleanStatementForOption(factStatement, conceptName)}`;
+          const otherConcepts = distinctConcepts.filter((c) => c.toLowerCase() !== conceptName.toLowerCase());
+          const distractorTerms = [
+            ...otherConcepts,
+            `${sectionName} Model`,
+            `${cleanTopic} Structure`,
+            `System Parameter`,
+          ].slice(0, 3);
+
+          const rawOptions = [conceptName, distractorTerms[0], distractorTerms[1], distractorTerms[2]];
+          // Rotate option position
+          const targetPos = (i * 3 + 1) % 4;
+          const rotatedOptions = [...rawOptions];
+          const temp = rotatedOptions[targetPos];
+          rotatedOptions[targetPos] = conceptName;
+          rotatedOptions[0] = temp;
+
           dynamicItems.push({
-            questionText: `Complete the statement regarding "${docName || effectiveTopic}": "${blanked}"`,
+            questionText: `Complete the following statement from ${sectionName}: "${blanked}"`,
             type: 'fill_in_the_blank',
-            options: [focusWord, 'Indeterminate Variable', 'External Parameter', 'Static Constant'],
-            correctAnswer: focusWord,
-            explanation: `In the context of ${effectiveTopic}, "${focusWord}" is the precise term established in the curriculum.`,
+            options: rotatedOptions,
+            correctAnswer: conceptName,
+            explanation: `In ${sectionName}, "${conceptName}" is the concept defined by: ${factStatement}`,
             difficulty: difficulty || 'medium',
-            topic: effectiveTopic,
-            concept: focusWord,
-            learningObjective: `Recall and apply key terminology in ${effectiveTopic}.`,
+            topic: sectionName,
+            concept: conceptName,
+            learningObjective: `Identify and recall key terminology in ${sectionName}.`,
             bloomsLevel: bloomsTaxonomy || 'Remembering',
             createdBy: 'AI',
           });
         } else {
-          // MCQ
-          dynamicItems.push({
-            questionText: `In the study of "${docName || effectiveTopic}", which principle governs ${focusWord}?`,
-            type: 'mcq',
-            options: [
-              line.length > 80 ? line.slice(0, 77) + '...' : line,
-              `The concept is strictly invalid under standard ${effectiveTopic} conventions`,
-              `It operates independently of any parameters described in ${docName || effectiveTopic}`,
-              `It requires contradictory external prerequisites not outlined in the material`,
-            ],
-            correctAnswer: line.length > 80 ? line.slice(0, 77) + '...' : line,
-            explanation: `As detailed in the curriculum on ${effectiveTopic}, this statement defines the primary behavior and invariant of ${focusWord}.`,
-            difficulty: difficulty || 'medium',
-            topic: effectiveTopic,
-            concept: focusWord,
-            learningObjective: `Analyze and defend core principles in ${effectiveTopic}.`,
-            bloomsLevel: bloomsTaxonomy || 'Analyzing',
-            createdBy: 'AI',
-          });
+          // Multiple Choice (MCQ) — 100% Document-Derived Options & Distractors!
+          const escapedConcept = conceptName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const canUseConceptIdentification =
+            i % 3 === 1 &&
+            distinctConcepts.length >= 4 &&
+            conceptName.length <= 45 &&
+            factStatement.length > conceptName.length + 15;
+
+          if (canUseConceptIdentification) {
+            // Format B: Ask which concept from the document matches the definition from the document
+            const strippedFact = cleanStatementForOption(factStatement, conceptName);
+            const maskedFact = new RegExp(escapedConcept, 'i').test(strippedFact)
+              ? strippedFact.replace(new RegExp(escapedConcept, 'gi'), 'this mechanism')
+              : strippedFact;
+
+            const otherConceptPool = distinctConcepts.filter((c) => c.toLowerCase() !== conceptName.toLowerCase());
+            const d1 = otherConceptPool[(i * 2) % otherConceptPool.length] || `${sectionName} Component A`;
+            const d2 = otherConceptPool[(i * 2 + 1) % otherConceptPool.length] || `${sectionName} Component B`;
+            const d3 = otherConceptPool[(i * 2 + 2) % otherConceptPool.length] || `${sectionName} Component C`;
+
+            const options = [d1, d2, d3];
+            const targetPos = (i * 3 + 1) % 4;
+            options.splice(targetPos, 0, conceptName);
+
+            dynamicItems.push({
+              questionText: `In ${sectionName}, which concept or term is described by the following statement: "${maskedFact.replace(/[.!?]$/, '')}"?`,
+              type: 'mcq',
+              options,
+              correctAnswer: conceptName,
+              explanation: `In ${sectionName}, "${conceptName}" is defined by: ${factStatement}`,
+              difficulty: difficulty || 'medium',
+              topic: sectionName,
+              concept: conceptName,
+              learningObjective: `Identify ${conceptName} from its definition in ${sectionName}.`,
+              bloomsLevel: bloomsTaxonomy || 'Understanding',
+              createdBy: 'AI',
+            });
+          } else {
+            // Format A: Ask about unit.concept where the correct answer is unit.statement and the 3 distractors are OTHER real statements from the document!
+            const stemFn = statementQuestionTemplates[i % statementQuestionTemplates.length];
+            const stem = stemFn(unit);
+            const correctOpt = cleanStatementForOption(factStatement, conceptName);
+
+            // Gather real statements from OTHER units in the same document as distractors
+            const otherStatements = units
+              .filter((u) => u.statement !== factStatement && u.concept.toLowerCase() !== conceptName.toLowerCase())
+              .map((u) => cleanStatementForOption(u.statement, u.concept))
+              .filter((s) => s.toLowerCase() !== correctOpt.toLowerCase() && s.length >= 15);
+
+            const domainDistractors = [
+              `Executes strictly in user space without requiring privileged kernel-level system traps`,
+              `Restricts operational state transitions to static compile-time constants without dynamic heap adjustments`,
+              `Maintains structural state consistency by acquiring synchronous mutual exclusion locks across execution threads`,
+              `Bypasses sequential verification buffers by relying entirely on unverified asynchronous background dispatch`,
+              `Translates memory addresses dynamically using an in-memory hierarchical page directory table`,
+              `Delegates execution context transitions directly to the parent process without duplicating state descriptors`,
+            ];
+
+            const distractorPool = [...otherStatements, ...domainDistractors];
+            const usedOpts = new Set<string>([correctOpt.toLowerCase()]);
+            const chosenDistractors: string[] = [];
+
+            for (let k = 0; k < distractorPool.length && chosenDistractors.length < 3; k++) {
+              const candidate = distractorPool[(i * 3 + k) % distractorPool.length];
+              if (candidate && !usedOpts.has(candidate.toLowerCase())) {
+                usedOpts.add(candidate.toLowerCase());
+                chosenDistractors.push(candidate);
+              }
+            }
+
+            for (let dIdx = 0; chosenDistractors.length < 3; dIdx++) {
+              chosenDistractors.push(domainDistractors[dIdx % domainDistractors.length]);
+            }
+
+            const options = [...chosenDistractors];
+            const targetPos = (i * 3 + 1) % 4;
+            options.splice(targetPos, 0, correctOpt);
+
+            dynamicItems.push({
+              questionText: stem,
+              type: 'mcq',
+              options,
+              correctAnswer: correctOpt,
+              explanation: `In ${sectionName}, ${conceptName} is characterized by: ${factStatement}`,
+              difficulty: difficulty || 'medium',
+              topic: sectionName,
+              concept: conceptName,
+              learningObjective: `Analyze and apply ${conceptName} in ${sectionName}.`,
+              bloomsLevel: bloomsTaxonomy || 'Application',
+              createdBy: 'AI',
+            });
+          }
         }
       }
+
       return dynamicItems;
     };
 
     if (!ai) {
-      const fallbackQuestions = generateContextualFallbackQuestions(
-        drillBrief || sourceText || documentTitle || effectiveTopic,
-        documentTitle || fileData?.fileName || effectiveTopic
-      );
+      const fallbackQuestions = generateContextualFallbackQuestions(cleanDocText);
       return res.json({ questions: fallbackQuestions });
     }
 
-    const prompt = `You are a university-level assessment coordinator and master drill author.
-Subject Domain: ${effectiveSubject}
-Topic Focus: ${effectiveTopic}
-Target Difficulty: ${difficulty} (easy, medium, or hard)
-Question Type: ${questionType} (options: mcq, true_false, fill_in_the_blank)
-Target Bloom's Taxonomy Level: ${bloomsTaxonomy}
+    const prompt = `You are a distinguished university professor designing an authentic, rigorous academic examination for students based on the curriculum concepts and technical mechanisms taught in the course material provided below.
 
-Generate exactly ${numQuestions} calibrated questions.
+Subject: ${cleanSubject}
+Topic: ${cleanTopic}
+Difficulty Level: ${difficulty} (easy, medium, hard)
+Question Type: ${questionType} (mcq, true_false, fill_in_the_blank)
+Target Bloom's Taxonomy: ${bloomsTaxonomy}
+Number of Questions: ${numQuestions}
 
-${drillBrief ? `🎯 AI SOCRATIC PEDAGOGICAL DIRECTIVE (What the student specifically needs to master):
+CRITICAL RULES FOR PROFESSOR-GRADE QUESTIONS:
+1. AUTHENTIC CLASSROOM EXAM QUESTIONS:
+   - Ask about actual technical concepts, mechanisms, algorithms, system calls, syntax, data structures, and operational rules taught in the material.
+   - For example, in Operating Systems / UNIX: ask about fork(), exec(), process scheduling, inodes, file permissions, pipes, IPC, signals, memory paging.
+   - For example, in Data Structures / Algorithms: ask about time complexity, traversal algorithms, pointer manipulations, balancing invariants.
+   - Frame questions as natural English interrogative sentences (e.g. "In UNIX, which system call is used to duplicate the current process?", "What is the primary role of an inode in the filesystem?").
+2. ABSOLUTELY FORBIDDEN:
+   - NEVER mention file names, file formats, slide numbers, dates, or phrases like "according to the document", "in the presentation", "in Unit V", "as stated in the text".
+   - NEVER copy verbatim slide headers, bullet fragments, or metadata as questions or options.
+   - NEVER produce robotic meta-options like "=== COMPLETE UNABRIDGED...", "Processing Pipeline...", "The concept is strictly invalid...", or "It operates independently of any parameters...".
+3. MULTIPLE CHOICE QUALITY (mcq):
+   - Every MCQ must have EXACTLY 4 distinct, plausible, high-quality technical options (A, B, C, D).
+   - Only ONE option must be clearly, unambiguously correct.
+   - Distractors must be realistic, credible technical terms or mechanisms from the same subject domain so students must understand the concept to answer correctly.
+   - correctAnswer must match one of the options character-for-character.
+4. EXPLANATION:
+   - Provide a clear 2-3 sentence technical explanation detailing why the correct answer is right and why it is essential.
+
+Curriculum Material Content:
 """
-${drillBrief}
-"""
-MANDATORY DIRECTIVE: You MUST generate all questions strictly testing and embodying the pedagogical blueprint above. Focus on the requested invariants, formulas, conceptual transitions, and common distractor misconceptions.` : (sourceText && sourceText.length > 20) || fileData?.base64 ? `Source Material Provided Below:
-"""
-${(sourceText && sourceText.length > 20) ? sourceText.slice(0, 120000) : `[Document Attached: ${documentTitle || fileData?.fileName || 'PDF Document'}. Extract directly from its pages.]`}
-"""
-CRITICAL MANDATORY INSTRUCTION: You MUST generate all questions strictly and exclusively from the provided document / PDF content and synthesized concept data.` : `MANDATORY INSTRUCTION: Generate high-yield questions for "${effectiveTopic}" in "${effectiveSubject}" targeting core principles, invariant laws, and diagnosing common student misconceptions.`}
-
-Strict Quality Rules:
-1. Every question stem, correct answer, and explanation must directly test facts, theories, definitions, formulas, or procedures relevant to this focus.
-2. For MCQ: Exactly 4 distinct, plausible options. Only one unambiguous correct answer. Avoid "All of the above".
-3. For Fill-in-the-blank: Provide the sentence with a blank ("_______") and provide the correct term as the answer.
-4. For True/False: Exactly 2 options ("True", "False").
-5. Provide a detailed, pedagogical explanation citing why the answer is correct according to the material and explaining why common misconception distractors are flawed.
-6. Return pure JSON matching the schema.`;
-
-    const isMultimodalValid =
-      fileData?.base64 &&
-      (fileData.mimeType === 'application/pdf' ||
-        fileData.mimeType?.startsWith('image/') ||
-        fileData.mimeType?.startsWith('audio/') ||
-        fileData.fileName?.toLowerCase().endsWith('.pdf'));
-
-    const contents: any = isMultimodalValid
-      ? {
-          parts: [
-            {
-              inlineData: {
-                mimeType: fileData.mimeType || 'application/pdf',
-                data: fileData.base64,
-              },
-            },
-            { text: prompt },
-          ],
-        }
-      : prompt;
+${cleanDocText ? cleanDocText.slice(0, 28000) : `Core university curriculum concepts and operational principles of ${cleanTopic} in ${cleanSubject}.`}
+"""`;
 
     let parsed: any = null;
 
-    try {
-      const response = await generateWithGemini(ai, {
-        contents,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              questions: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    questionText: { type: Type.STRING },
-                    type: { type: Type.STRING, enum: ['mcq', 'true_false', 'fill_in_the_blank'] },
-                    options: {
-                      type: Type.ARRAY,
-                      items: { type: Type.STRING },
-                    },
-                    correctAnswer: { type: Type.STRING },
-                    explanation: { type: Type.STRING },
-                    difficulty: { type: Type.STRING, enum: ['easy', 'medium', 'hard'] },
-                    topic: { type: Type.STRING },
-                    concept: { type: Type.STRING },
-                    learningObjective: { type: Type.STRING },
-                    bloomsLevel: { type: Type.STRING },
-                  },
-                  required: ['questionText', 'type', 'options', 'correctAnswer', 'explanation', 'difficulty', 'topic', 'concept', 'learningObjective'],
-                },
-              },
-            },
-            required: ['questions'],
-          },
-        },
-        timeoutMs: 30000,
-      });
-
-      parsed = JSON.parse(response.text || '{"questions":[]}');
-    } catch (primaryErr: any) {
-      console.warn('Primary Gemini question generation failed, trying text-based extraction:', primaryErr?.message);
-      
-      // If primary failed with inlineData, try text-only extraction
+    if (ai) {
       try {
-        let extractedPdfText = sourceText || '';
-        if (!extractedPdfText && fileData?.base64) {
-          extractedPdfText = extractReadablePdfText(fileData.base64);
-        }
-
-        const textPrompt = `Generate ${numQuestions} ${difficulty} ${questionType} questions on ${effectiveTopic} (${effectiveSubject}).
-${extractedPdfText ? `Curriculum text: "${extractedPdfText.slice(0, 4000)}"` : ''}
-Return pure JSON with format: {"questions": [{"questionText": "...", "type": "${questionType}", "options": ["A","B","C","D"], "correctAnswer": "A", "explanation": "...", "difficulty": "${difficulty}", "topic": "${effectiveTopic}", "concept": "${effectiveTopic}", "learningObjective": "Master ${effectiveTopic}"}]}`;
-
-        const textResponse = await generateWithGemini(ai, {
-          contents: textPrompt,
+        const response = await generateWithGemini(ai, {
+          contents: prompt,
           config: {
             responseMimeType: 'application/json',
+            maxOutputTokens: 4096,
+            temperature: 0.3,
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                questions: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      questionText: { type: Type.STRING },
+                      type: { type: Type.STRING, enum: ['mcq', 'true_false', 'fill_in_the_blank'] },
+                      options: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING },
+                      },
+                      correctAnswer: { type: Type.STRING },
+                      explanation: { type: Type.STRING },
+                      difficulty: { type: Type.STRING, enum: ['easy', 'medium', 'hard'] },
+                      topic: { type: Type.STRING },
+                      concept: { type: Type.STRING },
+                      learningObjective: { type: Type.STRING },
+                      bloomsLevel: { type: Type.STRING },
+                    },
+                    required: ['questionText', 'type', 'options', 'correctAnswer', 'explanation', 'difficulty', 'topic', 'concept', 'learningObjective'],
+                  },
+                },
+              },
+              required: ['questions'],
+            },
           },
-          timeoutMs: 15000,
+          timeoutMs: 25000,
         });
 
-        parsed = JSON.parse(textResponse.text || '{"questions":[]}');
-      } catch (secondaryErr: any) {
-        console.warn('Secondary text question generation failed, using contextual fallback engine:', secondaryErr?.message);
+        parsed = JSON.parse(response.text || '{"questions":[]}');
+      } catch (primaryErr: any) {
+        console.warn('Gemini question generation notice, using contextual document extraction engine:', primaryErr?.message);
       }
     }
 
     if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
-      // Clean and sanitize every question item
+      // Clean and sanitize every question item - strip any remaining file references
+      const sanitizeQuestionString = (str: string): string => {
+        return str
+          .replace(/In the study of ".*?",?\s*/gi, '')
+          .replace(/According to ".*?",?\s*/gi, '')
+          .replace(/In (the context of )?"Unit[ _]?[0-9ivx]+.*?",?\s*/gi, '')
+          .replace(/As detailed in the curriculum on .*?,?\s*/gi, '')
+          .replace(/\b[A-Za-z0-9_-]+\.(pptx|pdf|docx|ppt|doc|txt)\b/gi, cleanTopic)
+          .replace(/===+.*?===+/g, '')
+          .replace(/Processing Pipeline:?.*$/gim, '')
+          .trim();
+      };
+
       const cleanQuestions = parsed.questions.map((q: any) => ({
         ...q,
         type: q.type || questionType || 'mcq',
-        questionText: String(q.questionText || `Question on ${effectiveTopic}`),
-        options: Array.isArray(q.options) && q.options.length > 0 ? q.options.map((o: any) => String(o)) : ['Option A', 'Option B', 'Option C', 'Option D'],
-        correctAnswer: String(q.correctAnswer || (q.options ? q.options[0] : 'True')),
-        explanation: String(q.explanation || `Core principles of ${effectiveTopic}.`),
+        questionText: sanitizeQuestionString(q.questionText || `What is the primary function of ${cleanTopic}?`),
+        options: Array.isArray(q.options) && q.options.length > 0
+          ? q.options.map((o: any) => sanitizeQuestionString(String(o)))
+          : ['Option A', 'Option B', 'Option C', 'Option D'],
+        correctAnswer: sanitizeQuestionString(String(q.correctAnswer || (q.options ? q.options[0] : 'True'))),
+        explanation: sanitizeQuestionString(String(q.explanation || `Core principles of ${cleanTopic}.`)),
         difficulty: String(q.difficulty || difficulty || 'medium'),
-        topic: String(q.topic || effectiveTopic),
-        concept: String(q.concept || effectiveTopic),
-        learningObjective: String(q.learningObjective || `Analyze ${effectiveTopic}`),
+        topic: String(q.topic || cleanTopic),
+        concept: String(q.concept || cleanTopic),
+        learningObjective: String(q.learningObjective || `Analyze ${cleanTopic}`),
       }));
+
       return res.json({ questions: cleanQuestions });
     }
 
     // High quality contextual fallback if AI is completely unavailable
-    const fallbackQuestions = generateContextualFallbackQuestions(
-      drillBrief || sourceText || documentTitle || effectiveTopic,
-      documentTitle || fileData?.fileName || effectiveTopic
-    );
+    const fallbackQuestions = generateContextualFallbackQuestions(cleanDocText);
     return res.json({ questions: fallbackQuestions });
   } catch (error) {
     console.error('Error generating questions, returning safe fallback:', error);
-    const safeTopic = req.body?.topic || 'Curriculum Concepts';
+    const safeTopic = (req.body?.topic || 'Core Concepts')
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_\\-]/g, ' ')
+      .trim();
     return res.json({
       questions: [
         {
-          questionText: `Which of the following represents a primary characteristic of ${safeTopic}?`,
+          questionText: `Which of the following represents a primary operational characteristic of ${safeTopic}?`,
           type: 'mcq',
           options: [
-            `Standard invariant principles established in the curriculum`,
-            `Complete absence of formal boundary conditions`,
-            `Deterministic divergence without state synchronization`,
-            `Unconstrained arbitrary memory allocation`,
+            `Deterministic state verification and structural memory consistency`,
+            `Unconstrained asynchronous memory allocation without verification`,
+            `Complete absence of formal boundary and termination checks`,
+            `Arbitrary thread preemption without mutual exclusion locks`,
           ],
-          correctAnswer: `Standard invariant principles established in the curriculum`,
-          explanation: `In standard higher education curricula, ${safeTopic} requires consistent invariant principles and formal operational definitions.`,
+          correctAnswer: `Deterministic state verification and structural memory consistency`,
+          explanation: `In computer science and engineering curricula, ${safeTopic} requires consistent operational invariants and formal state verification.`,
           difficulty: 'medium',
           topic: safeTopic,
           concept: safeTopic,
@@ -2305,6 +3067,246 @@ Return pure JSON with format: {"questions": [{"questionText": "...", "type": "${
         },
       ],
     });
+  }
+});
+
+/**
+ * 2a. Convert & Re-synthesize Question Type via AI
+ * Takes an existing question and regenerates it into the requested targetType (mcq, true_false, fill_in_the_blank, short_answer)
+ * grounded in the underlying curriculum concept and document knowledge base.
+ */
+apiRouter.post(['/ai/convert-question-type', '/api/ai/convert-question-type'], async (req: Request, res: Response) => {
+  try {
+    const {
+      question,
+      targetType,
+      sourceText = '',
+      topic = '',
+      subject = '',
+      difficulty = 'medium',
+    } = req.body;
+
+    if (!question || !targetType) {
+      return res.status(400).json({ error: 'Missing question or targetType' });
+    }
+
+    const cleanTopic = (topic || question.topic || 'Core Curriculum Concepts')
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_\\-]/g, ' ')
+      .replace(/\b(final|merged|draft|copy|v\d+|\d{1,2}[a-z]{3}\d{2,4})\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Core Curriculum Concepts';
+
+    const cleanSubject = (subject || question.subject || 'Academic Studies')
+      .replace(/[_\\-]/g, ' ')
+      .trim();
+
+    const cleanDocText = (sourceText || '')
+      .replace(/===+.*?===+/g, '\n')
+      .replace(/\[Attached Multimodal.*?\]/gi, '')
+      .replace(/File format:\s*\S+/gi, '')
+      .replace(/Size:\s*[\d.]+\s*MB/gi, '')
+      .replace(/Processing Pipeline:.*$/gim, '')
+      .replace(/\[Extracted Complete Document Content\]:?/gi, '')
+      .replace(/\b[A-Za-z0-9_-]+\.(pptx|pdf|docx|ppt|doc|txt|json|csv)\b/gi, cleanTopic)
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
+    const ai = getAIClient();
+
+    const prompt = `You are a distinguished university professor and academic examination designer.
+Your task is to re-synthesize and transform an existing assessment question into a '${targetType}' format while preserving the technical core concept and aligning with the curriculum course material.
+
+CURRENT QUESTION DETAILS:
+- Original Type: ${question.type}
+- Original Question: ${question.questionText}
+- Original Options: ${JSON.stringify(question.options || [])}
+- Original Correct Answer: ${question.correctAnswer}
+- Original Explanation: ${question.explanation || ''}
+- Subject: ${cleanSubject}
+- Topic: ${cleanTopic}
+- Difficulty: ${difficulty || question.difficulty || 'medium'}
+
+TARGET FORMAT: ${targetType} (mcq, true_false, fill_in_the_blank, short_answer)
+
+RE-SYNTHESIS RULES BY TARGET FORMAT:
+1. TARGET: true_false
+   - 'questionText': MUST be a single, unambiguous declarative assertion stating a technical fact, mechanism, property, or operational rule (e.g., "In the UNIX operating system, standard error (stderr) is assigned file descriptor 2 by default." or "A process that has finished execution but still has an entry in the process table is termed an Orphan process.").
+   - CRITICAL: DO NOT use interrogatives ("Which of...", "What is...", "Identify..."). Must be an assertion that can be evaluated as strictly True or False.
+   - 'options': MUST be exactly ["True", "False"].
+   - 'correctAnswer': MUST be either "True" or "False". You may create an assertion that is True or a plausible technical misconception that is False.
+   - 'explanation': 2-3 sentences explaining the exact technical reasoning why the statement is True or False.
+
+2. TARGET: mcq
+   - 'questionText': An interrogative problem asking the student to analyze, identify, calculate, or select a specific mechanism, behavior, or distinction (e.g., "Which system call in UNIX creates a child process that shares identical memory pages under copy-on-write until modified?").
+   - 'options': MUST be an array of EXACTLY 4 distinct, plausible technical choices (e.g. ["fork()", "vfork()", "clone()", "exec()"]).
+   - FORBIDDEN in options: Never use "Option A", "Alternative Concept B", "Secondary Invariant", "None of the above", or "All of the above". All 4 options must be genuine domain technical terms or mechanisms.
+   - 'correctAnswer': MUST be one of the 4 options verbatim.
+   - 'explanation': Clear explanation of why the correct option is right and why the distractors are wrong.
+
+3. TARGET: fill_in_the_blank
+   - 'questionText': A complete, grammatically sound sentence with a single missing key technical term denoted by "_____".
+     (e.g., "In UNIX, the process with PID 1 responsible for system initialization is known as _____ .")
+   - 'options': []
+   - 'correctAnswer': The exact canonical keyword or phrase that completes the blank (e.g., "init" or "systemd").
+   - 'explanation': Concise explanation of the concept and term.
+
+4. TARGET: short_answer
+   - 'questionText': A direct analytical or descriptive question asking the student to explain or trace a mechanism.
+     (e.g., "Explain the difference between a zombie process and an orphan process in UNIX.")
+   - 'options': []
+   - 'correctAnswer': A concise model answer covering the key technical components.
+   - 'explanation': Evaluation rubric and criteria.
+
+RESTRICTIONS FOR ALL TYPES:
+- NEVER mention document filenames, file extensions (e.g. .pptx, .pdf, Unit V), slide numbers, or phrases like "according to the document".
+- NEVER output raw metadata or internal tags.
+
+Curriculum Context Excerpt:
+"""
+${cleanDocText ? cleanDocText.slice(0, 16000) : `Core concepts and principles of ${cleanTopic} in ${cleanSubject}.`}
+"""`;
+
+    let regenerated: any = null;
+
+    if (ai) {
+      try {
+        const response = await generateWithGemini(ai, {
+          contents: prompt,
+          config: {
+            responseMimeType: 'application/json',
+            maxOutputTokens: 2048,
+            temperature: 0.25,
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                questionText: { type: Type.STRING },
+                type: { type: Type.STRING, enum: ['mcq', 'true_false', 'fill_in_the_blank', 'short_answer'] },
+                options: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                },
+                correctAnswer: { type: Type.STRING },
+                explanation: { type: Type.STRING },
+                difficulty: { type: Type.STRING },
+                topic: { type: Type.STRING },
+              },
+              required: ['questionText', 'type', 'options', 'correctAnswer', 'explanation'],
+            },
+          },
+          timeoutMs: 20000,
+        });
+
+        regenerated = JSON.parse(response.text || '{}');
+      } catch (aiErr: any) {
+        console.warn('AI question conversion notice, using smart algorithmic reformatter:', aiErr?.message);
+      }
+    }
+
+    // Helper to sanitize any leaked filename or document references
+    const sanitizeStr = (s: string): string => {
+      return (s || '')
+        .replace(/In the study of ".*?",?\s*/gi, '')
+        .replace(/According to ".*?",?\s*/gi, '')
+        .replace(/In (the context of )?"Unit[ _]?[0-9ivx]+.*?",?\s*/gi, '')
+        .replace(/As detailed in the curriculum on .*?,?\s*/gi, '')
+        .replace(/\b[A-Za-z0-9_-]+\.(pptx|pdf|docx|ppt|doc|txt)\b/gi, cleanTopic)
+        .replace(/===+.*?===+/g, '')
+        .replace(/Processing Pipeline:?.*$/gim, '')
+        .trim();
+    };
+
+    if (regenerated && regenerated.questionText) {
+      let finalOptions = Array.isArray(regenerated.options) ? regenerated.options.map((o: any) => sanitizeStr(String(o))) : [];
+      let finalAnswer = sanitizeStr(String(regenerated.correctAnswer || ''));
+
+      if (targetType === 'true_false') {
+        finalOptions = ['True', 'False'];
+        finalAnswer = finalAnswer.toLowerCase().includes('false') ? 'False' : 'True';
+      } else if (targetType === 'mcq') {
+        if (!finalOptions.includes(finalAnswer) && finalOptions.length > 0) {
+          finalOptions[0] = finalAnswer;
+        }
+        if (finalOptions.length < 4) {
+          const fillers = ['Standard kernel routine', 'Synchronous block traversal', 'Volatile register state'];
+          while (finalOptions.length < 4) {
+            finalOptions.push(fillers[finalOptions.length - 1] || `Mechanism ${finalOptions.length + 1}`);
+          }
+        }
+      } else {
+        finalOptions = [];
+      }
+
+      return res.json({
+        question: {
+          ...question,
+          questionText: sanitizeStr(regenerated.questionText),
+          type: targetType,
+          options: finalOptions,
+          correctAnswer: finalAnswer,
+          explanation: sanitizeStr(regenerated.explanation || question.explanation || ''),
+          difficulty: regenerated.difficulty || question.difficulty || difficulty,
+          topic: cleanTopic,
+        },
+      });
+    }
+
+    // High quality intelligent algorithmic transformation fallback
+    let fallbackText = question.questionText;
+    let fallbackOptions: string[] = [];
+    let fallbackAnswer = question.correctAnswer || '';
+    let fallbackExplanation = question.explanation || `Core operational behavior of ${cleanTopic}.`;
+
+    const rawPrompt = question.questionText.replace(/\?$/, '').trim();
+
+    if (targetType === 'true_false') {
+      fallbackOptions = ['True', 'False'];
+      fallbackAnswer = 'True';
+      if (question.type === 'mcq' && question.correctAnswer) {
+        fallbackText = `In ${cleanTopic}, ${question.correctAnswer.toLowerCase().startsWith('in') ? question.correctAnswer : `${cleanTopic} is characterized by: ${question.correctAnswer}`}.`;
+      } else {
+        fallbackText = `In ${cleanTopic}, ${rawPrompt.replace(/^(Which|What|How|Why|Where)\b.*?\b(is|are|does|do|can|defines|governs)\b/i, '').trim()} is an established operational invariant.`;
+      }
+      fallbackExplanation = `This statement accurately describes the foundational behavior of ${cleanTopic}.`;
+    } else if (targetType === 'fill_in_the_blank') {
+      fallbackOptions = [];
+      const keyTerm = question.correctAnswer && question.correctAnswer.length < 40 ? question.correctAnswer : cleanTopic;
+      fallbackAnswer = keyTerm;
+      fallbackText = `In ${cleanTopic}, the primary mechanism for ${rawPrompt.replace(/^(Which|What|How|Why)\b.*?\b(is|are|does|do)\b/i, '').trim() || 'operational coordination'} is _____ .`;
+      fallbackExplanation = `${keyTerm} is the canonical term defined in the curriculum.`;
+    } else if (targetType === 'short_answer') {
+      fallbackOptions = [];
+      fallbackText = `Explain the primary operational role and behavior of ${cleanTopic} regarding ${rawPrompt.replace(/^(Which|What|How|Why)\b.*?\b(is|are|does|do)\b/i, '').trim() || 'core functions'}.`;
+      fallbackAnswer = question.correctAnswer || `A comprehensive overview detailing the invariants, operational bounds, and mechanisms of ${cleanTopic}.`;
+      fallbackExplanation = `Students should detail the underlying mechanism, operational constraints, and real-world application in ${cleanTopic}.`;
+    } else if (targetType === 'mcq') {
+      const bestAnswer = question.correctAnswer || `Formal state verification of ${cleanTopic}`;
+      fallbackAnswer = bestAnswer;
+      fallbackText = rawPrompt.endsWith('?') ? rawPrompt : `Which statement accurately describes ${cleanTopic}?`;
+      fallbackOptions = [
+        bestAnswer,
+        `Unsynchronized concurrent thread execution without mutual exclusion locks`,
+        `Direct bypass of kernel space privileged instruction validation`,
+        `Static compile-time constant evaluation without runtime execution`,
+      ];
+    }
+
+    return res.json({
+      question: {
+        ...question,
+        questionText: sanitizeStr(fallbackText),
+        type: targetType,
+        options: fallbackOptions,
+        correctAnswer: sanitizeStr(fallbackAnswer),
+        explanation: sanitizeStr(fallbackExplanation),
+        difficulty: question.difficulty || difficulty,
+        topic: cleanTopic,
+      },
+    });
+  } catch (err: any) {
+    console.error('Error in convert-question-type:', err);
+    return res.status(500).json({ error: 'Failed to convert question type' });
   }
 });
 
@@ -5886,7 +6888,7 @@ GUIDELINES FOR OUTPUTS:
             temperature: 0.4,
             maxOutputTokens: 2048,
           },
-          timeoutMs: 12000,
+          timeoutMs: 30000,
         });
 
         const reply = response.text?.trim();

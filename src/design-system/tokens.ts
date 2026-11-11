@@ -1,11 +1,32 @@
 /**
- * AI-IAPLP Role-Based Design Token System
- * 
- * Strict Brand Identity:
- * Intelligent, Trustworthy, Educational, Futuristic, Professional, Human-centered, Data-driven
+ * NOCTURNE AURORA Design System Tokens
+ *
+ * Strict Color System:
+ * - Obsidian: #0E0C10 (Premium intelligence and depth)
+ * - Aubergine: #211522 (Depth and focus)
+ * - Electric Violet: #8B5CF6 (AI and assessment)
+ * - Aurora Teal: #68E0D0 (Learning and knowledge)
+ * - Luminous Mint: #C7F36D (Progress and mastery)
+ * - Soft Coral: #FF786B (Attention and human energy)
+ * - Warm Ivory: #F5F0E7 (Clean academic surfaces)
+ * - Dusty Lilac: #B9ADBF (Subtle structure)
+ * - Ink: #17131A (Crisp typography)
+ * - Plum Gray: #3A2D3C (Muted borders and elevations)
  */
+import { StudentAccentPreset } from '../types';
 
-import { StudentAccentPreset, UserRole, ThemeMode } from '../types';
+export const NOCTURNE_AURORA = {
+  obsidian: '#0E0C10',
+  aubergine: '#211522',
+  electricViolet: '#8B5CF6',
+  auroraTeal: '#68E0D0',
+  luminousMint: '#C7F36D',
+  softCoral: '#FF786B',
+  warmIvory: '#F5F0E7',
+  dustyLilac: '#B9ADBF',
+  ink: '#17131A',
+  plumGray: '#3A2D3C',
+} as const;
 
 export interface ThemeColors {
   primary: string;

@@ -771,9 +771,9 @@ What problem, invariant, or assignment roadmap shall we tackle today?`,
                         Multi-Phase Socratic Decomposition:
                       </span>
                       <div className="space-y-2">
-                        {m.assignmentPlan.phases.map((phase) => (
+                        {m.assignmentPlan.phases.map((phase, pIdx) => (
                           <div
-                            key={phase.phaseNumber}
+                            key={`${phase.phaseNumber || 'phase'}-${pIdx}`}
                             className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5"
                           >
                             <div className="flex items-center justify-between font-mono text-xs font-bold text-white">

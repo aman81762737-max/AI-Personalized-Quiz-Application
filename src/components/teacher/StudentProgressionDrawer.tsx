@@ -602,9 +602,9 @@ export const StudentProgressionDrawer: React.FC<StudentProgressionDrawerProps> =
 
                 {/* Message Stream */}
                 <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${isDark ? 'bg-[#07090E]' : 'bg-slate-50'}`}>
-                  {messages.map((m) => (
+                  {messages.map((m, mIdx) => (
                     <div
-                      key={m.id}
+                      key={`${m.id || 'msg'}-${mIdx}`}
                       className={`flex flex-col ${m.role === 'teacher' ? 'items-end' : 'items-start'}`}
                     >
                       <div

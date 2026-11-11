@@ -39,6 +39,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { ACCREDITED_INSTITUTIONS } from '../../lib/institutions';
 import { NeuralMeshCanvas } from '../motion/NeuralMeshCanvas';
+import { Ecosystem3DCanvas } from './Ecosystem3DCanvas';
+import { NOCTURNE_AURORA } from '../../design-system/tokens';
 
 interface FaqItem {
   id: string;
@@ -394,6 +396,287 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
               </div>
             </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* 3D INTELLIGENT LEARNING ECOSYSTEM */}
+      <section className={`py-20 border-b ${isDark ? 'border-white/10 bg-[#0E0C10]' : 'border-slate-200 bg-slate-50'} relative overflow-hidden`}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="text-center max-w-3xl mx-auto mb-10">
+            <span className="text-xs font-mono font-semibold text-[#8B5CF6] tracking-wider uppercase flex items-center justify-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>3D Intelligent Learning Ecosystem</span>
+            </span>
+            <h2 className={`text-3xl sm:text-4xl font-extrabold ${isDark ? 'text-white' : 'text-black'} mt-2 tracking-tight`}>
+              The Living Knowledge Graph
+            </h2>
+            <p className={`mt-3 text-sm ${isDark ? 'text-slate-400' : 'text-slate-700'} leading-relaxed`}>
+              Interact with the 5 foundational nodes connecting academic evaluation directly with personalized conceptual remediation. Hover or click nodes to inspect live telemetry.
+            </p>
+          </div>
+
+          <Ecosystem3DCanvas isDark={isDark} />
+        </div>
+      </section>
+
+      {/* TRADITIONAL ASSESSMENT CRISIS VS PLATFORM SOLUTION */}
+      <section className={`py-24 border-b ${isDark ? 'border-white/10 bg-[#0E0C10]' : 'border-slate-200 bg-white'}`}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <span className="text-xs font-mono font-semibold text-[#FF786B] tracking-wider uppercase">
+              The Pedagogical Gap
+            </span>
+            <h2 className={`text-3xl sm:text-4xl font-extrabold ${isDark ? 'text-white' : 'text-black'} mt-2 tracking-tight`}>
+              Rote Testing vs Closed-Loop Intelligence
+            </h2>
+            <p className={`mt-3 text-sm ${isDark ? 'text-slate-400' : 'text-slate-700'} leading-relaxed`}>
+              Why traditional examination approaches fail modern engineering education, and how our closed-loop architecture solves it.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* The Old Way */}
+            <div className={`p-8 rounded-2xl border border-rose-500/25 ${isDark ? 'bg-rose-950/15' : 'bg-rose-50/70'} space-y-5`}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-sm">
+                  ✕
+                </div>
+                <div>
+                  <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>The Traditional Examination Model</h3>
+                  <div className="text-[11px] font-mono text-rose-400">Disconnected & Static</div>
+                </div>
+              </div>
+              <ul className="space-y-3.5 text-xs text-slate-300">
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-400 font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>One-Size-Fits-All Papers:</strong> Identical questions distributed indiscriminately without regard for topic difficulty or Bloom cognitive depth.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-400 font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>Dead-End Feedback:</strong> Results returned weeks later as a single aggregate percentage with zero diagnostic topic breakdown.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-400 font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>No Adaptive Remediation:</strong> Students left without guidance on specific blindspots, repeating mistakes in subsequent semesters.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-400 font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>Vulnerability to Malpractice:</strong> Lack of seamless browser-level lock-mode containment during digital tests.</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* The Platform Way */}
+            <div className={`p-8 rounded-2xl border border-[#68E0D0]/30 ${isDark ? 'bg-[#211522]/60' : 'bg-emerald-50/70'} space-y-5`}>
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#68E0D0]/20 text-[#68E0D0] flex items-center justify-center font-bold text-sm">
+                  ✓
+                </div>
+                <div>
+                  <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Our AI-Powered Closed-Loop Platform</h3>
+                  <div className="text-[11px] font-mono text-[#68E0D0]">Continuous Mastery Engine</div>
+                </div>
+              </div>
+              <ul className="space-y-3.5 text-xs text-slate-300">
+                <li className="flex items-start gap-2.5">
+                  <span className="text-[#68E0D0] font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>Controlled Question-Set Generation:</strong> Multi-version randomized assembly strictly matching teacher difficulty quotas (e.g. 5 Easy, 6 Medium, 4 Hard).</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-[#68E0D0] font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>Shared Student Learning Profile:</strong> Instantaneous post-exam topic accuracy updating a persistent knowledge radar.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-[#68E0D0] font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>Living Socratic AI Tutor:</strong> Guides comprehension using Bloom step-by-step rationales, never giving away raw answers.</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-[#68E0D0] font-bold shrink-0 mt-0.5">•</span>
+                  <span><strong>Assessment Lock Mode:</strong> Supported browser-level focus sentinel tracking window switches, clipboard actions, and fullscreen exits.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* THE CENTRAL PRODUCT LOOP */}
+      <section className={`py-24 border-b ${isDark ? 'border-white/10 bg-[#0A0D14]' : 'border-slate-200 bg-slate-50'}`}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <span className="text-xs font-mono font-semibold text-[#C7F36D] tracking-wider uppercase">
+              The Central Loop
+            </span>
+            <h2 className={`text-3xl sm:text-4xl font-extrabold ${isDark ? 'text-white' : 'text-black'} mt-2 tracking-tight`}>
+              Learn → Assess → Analyze → Personalize → Improve
+            </h2>
+            <p className={`mt-3 text-sm ${isDark ? 'text-slate-400' : 'text-slate-700'} leading-relaxed`}>
+              Both modules are permanently united through the Student Learning Profile, ensuring evaluation drives genuine academic growth.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {[
+              { step: '01', title: 'Learn', desc: 'Study curriculum documents, visual lecture roadmaps, and quick 3-minute revision briefs.', color: '#8B5CF6' },
+              { step: '02', title: 'Assess', desc: 'Attempt formal teacher-approved assessments assembled with exact cognitive difficulty quotas.', color: '#68E0D0' },
+              { step: '03', title: 'Analyze', desc: 'Automated evaluation computes topic-wise accuracy, diagnosing precision blindspots.', color: '#FF786B' },
+              { step: '04', title: 'Personalize', desc: 'Adaptive drills select approved questions while the Socratic AI Tutor remediates root misconceptions.', color: '#C7F36D' },
+              { step: '05', title: 'Improve', desc: 'Re-tested concepts update the persistent mastery matrix, moving students from novice to mastery.', color: '#F5F0E7' },
+            ].map((s, i) => (
+              <div
+                key={i}
+                className={`p-5 rounded-2xl border ${isDark ? 'border-white/10 bg-[#17131A]' : 'border-slate-200 bg-white'} space-y-3 relative group hover:border-[#68E0D0]/50 transition-all`}
+              >
+                <div className="text-2xl font-mono font-black" style={{ color: s.color }}>
+                  {s.step}
+                </div>
+                <h4 className={`text-sm font-bold ${isDark ? 'text-white' : 'text-black'}`}>{s.title}</h4>
+                <p className="text-[11px] text-slate-400 leading-relaxed font-sans">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* MODULE A & MODULE B DEEP DIVE */}
+      <section className={`py-24 border-b ${isDark ? 'border-white/10 bg-[#0E0C10]' : 'border-slate-200 bg-white'}`}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+          {/* Module A */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+            <div className="space-y-4">
+              <span className="text-xs font-mono font-bold text-[#8B5CF6] uppercase tracking-wider flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5" />
+                <span>MODULE A · FACULTY COMMAND</span>
+              </span>
+              <h3 className={`text-2xl sm:text-3xl font-extrabold ${isDark ? 'text-white' : 'text-slate-900'} tracking-tight`}>
+                AI-Powered Intelligent Assessment
+              </h3>
+              <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'} leading-relaxed`}>
+                Faculty upload curriculum files (PDF, DOCX, lecture notes), synthesize draft question pools using Bloom cognitive tiers, and maintain an institutional question bank where only approved questions enter student exams.
+              </p>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="p-3 rounded-xl border border-white/10 bg-white/5 space-y-1">
+                  <div className="text-xs font-bold text-white">Controlled Set Assembly</div>
+                  <div className="text-[11px] text-slate-400">Strict difficulty quotas (e.g. 30% Easy, 40% Med, 30% Hard).</div>
+                </div>
+                <div className="p-3 rounded-xl border border-white/10 bg-white/5 space-y-1">
+                  <div className="text-xs font-bold text-white">Browser-Level Lock Mode</div>
+                  <div className="text-[11px] text-slate-400">Live monitoring for focus losses, tab switches, and clipboard copy.</div>
+                </div>
+              </div>
+            </div>
+
+            <div className={`p-6 rounded-2xl border ${isDark ? 'border-white/10 bg-black/40' : 'border-slate-200 bg-slate-100'} space-y-4 font-mono text-xs`}>
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <span className="text-slate-400">EXAMINATION PREPARATION TELEMETRY</span>
+                <span className="text-[#10B981] font-bold">APPROVED BANK SYNCED</span>
+              </div>
+              <div className="space-y-2 text-[11px]">
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Curriculum Source:</span>
+                  <span className="text-[#00F0FF]">CS201_DataStructures.pdf</span>
+                </div>
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Bloom Calibration:</span>
+                  <span className="text-[#8B5CF6]">Remember, Understand, Apply, Analyze</span>
+                </div>
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Quota Assembly:</span>
+                  <span className="text-amber-400">5 Easy · 6 Medium · 4 Hard (15 total)</span>
+                </div>
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Proctor Sentinel:</span>
+                  <span className="text-emerald-400">Active (1-Attempt Enforced)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Module B */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center pt-8 border-t border-white/10">
+            <div className={`p-6 rounded-2xl border ${isDark ? 'border-white/10 bg-black/40' : 'border-slate-200 bg-slate-100'} space-y-4 font-mono text-xs order-2 lg:order-1`}>
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <span className="text-slate-400">STUDENT LEARNING PROFILE TELEMETRY</span>
+                <span className="text-[#68E0D0] font-bold">LIVE ADAPTATION</span>
+              </div>
+              <div className="space-y-2 text-[11px]">
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Dynamic Arrays:</span>
+                  <span className="text-rose-400 font-bold">90% Accuracy → Hard Quota</span>
+                </div>
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Linked Lists:</span>
+                  <span className="text-amber-400 font-bold">75% Accuracy → Medium Quota</span>
+                </div>
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Trees & Hierarchies:</span>
+                  <span className="text-cyan-400 font-bold">55% Accuracy → Med/Easy</span>
+                </div>
+                <div className="flex justify-between p-2 rounded bg-white/5">
+                  <span className="text-slate-300">Graph Algorithms:</span>
+                  <span className="text-emerald-400 font-bold">35% Accuracy → Easy Quota</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 order-1 lg:order-2">
+              <span className="text-xs font-mono font-bold text-[#68E0D0] uppercase tracking-wider flex items-center gap-1.5">
+                <BrainCircuit className="w-3.5 h-3.5" />
+                <span>MODULE B · STUDENT COCKPIT</span>
+              </span>
+              <h3 className={`text-2xl sm:text-3xl font-extrabold ${isDark ? 'text-white' : 'text-slate-900'} tracking-tight`}>
+                AI-Powered Personalized Learning
+              </h3>
+              <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-300' : 'text-slate-700'} leading-relaxed`}>
+                Empowers students to master complex concepts through interactive Socratic tutoring, tailored adaptive practice drills drawn strictly from approved questions, and dynamic visual roadmap progression.
+              </p>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="p-3 rounded-xl border border-white/10 bg-white/5 space-y-1">
+                  <div className="text-xs font-bold text-white">Socratic Doubt Resolution</div>
+                  <div className="text-[11px] text-slate-400">Step-by-step guidance without raw answers.</div>
+                </div>
+                <div className="p-3 rounded-xl border border-white/10 bg-white/5 space-y-1">
+                  <div className="text-xs font-bold text-white">Visual Mastery Milestones</div>
+                  <div className="text-[11px] text-slate-400">Deep, node-by-node learning roadmaps.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* TECHNOLOGY STACK ARCHITECTURE */}
+      <section className={`py-20 border-b ${isDark ? 'border-white/10 bg-[#07090E]' : 'border-slate-200 bg-slate-50'}`}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-3xl mx-auto mb-12">
+            <span className="text-xs font-mono font-semibold text-[#8B5CF6] tracking-wider uppercase">
+              Engineered for Production
+            </span>
+            <h2 className={`text-2xl sm:text-3xl font-extrabold ${isDark ? 'text-white' : 'text-black'} mt-1.5 tracking-tight`}>
+              Robust Multi-Tier Architecture
+            </h2>
+            <p className={`mt-2 text-xs sm:text-sm ${isDark ? 'text-slate-400' : 'text-slate-700'}`}>
+              Modular monolith architecture combining high-speed browser rendering with resilient cloud persistence and server-side AI execution.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {[
+              { title: 'Frontend Core', tech: 'React 19 · TypeScript · Vite · Tailwind CSS', desc: 'SPA architecture with zero-latency component transitions.' },
+              { title: 'Backend Monolith', tech: 'Node.js · Express · TypeScript', desc: 'High-throughput API layer with strict RBAC authentication.' },
+              { title: 'AI Engine', tech: 'Google Gemini API (@google/genai)', desc: 'Bloom’s-calibrated drafting and Socratic reasoning.' },
+              { title: '3D & Motion', tech: 'Three.js · Framer Motion · Canvas', desc: 'Hardware-accelerated visual telemetry without blocking UI.' },
+            ].map((t, idx) => (
+              <div
+                key={idx}
+                className={`p-4 rounded-xl border ${isDark ? 'border-white/10 bg-black/40' : 'border-slate-200 bg-white'} space-y-1.5`}
+              >
+                <div className="text-xs font-bold text-white">{t.title}</div>
+                <div className="text-[11px] font-mono text-[#68E0D0]">{t.tech}</div>
+                <p className="text-[10px] text-slate-400 leading-relaxed font-sans">{t.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
